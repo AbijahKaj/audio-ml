@@ -21,8 +21,10 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-          # For first publish, you need a token. After setting up OIDC, remove this.
-          # To use OIDC instead, remove the token line and ensure OIDC is configured on npmjs.com
+          # Use token for authentication (update NPM_TOKEN secret if expired)
+          # After first publish, you can switch to OIDC by:
+          # 1. Setting up trusted publisher on npmjs.com (Settings → Access Tokens → Add Trusted Publisher)
+          # 2. Removing the token line below
           token: ${{ secrets.NPM_TOKEN }}
 
       - name: Enable Corepack (for Yarn)
@@ -36,6 +38,8 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --access public
-        # Token is set in setup-node step above
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Token is also set in setup-node step above, but npm publish may need it in env too
         # After first publish, set up OIDC trusted publishing on npmjs.com
-        # Then remove NODE_AUTH_TOKEN from setup-node step
+        # Then remove both token references
