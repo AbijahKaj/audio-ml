@@ -19,10 +19,10 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.build.json",
-    "build:app": "tsc && vite build",
+    "build": "vite build",
+    "build:package": "tsc -p tsconfig.build.json",
     "preview": "vite preview",
-    "prepublishOnly": "yarn build"
+    "prepublishOnly": "yarn build:package"
   },
   "keywords": [
     "audio",
