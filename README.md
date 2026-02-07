@@ -205,7 +205,7 @@ This project is designed to be extensible. To add a new analyzer:
 
 ## License
 
-[Add your license here]
+MIT
 
 ## Resources
 
