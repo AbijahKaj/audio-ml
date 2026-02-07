@@ -22,7 +22,7 @@
     "build": "tsc -p tsconfig.build.json",
     "build:app": "tsc && vite build",
     "preview": "vite preview",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "yarn build"
   },
   "keywords": [
     "audio",
