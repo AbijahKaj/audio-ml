@@ -122,6 +122,8 @@ function setupVisualizations() {
     { analyzer: chromaAnalyzer, label: 'Chroma Features', width: 400, height: 150 },
     { analyzer: lpcAnalyzer, label: 'LPC', width: 400, height: 200 },
     { analyzer: cqtAnalyzer, label: 'Constant-Q Transform', width: 400, height: 250 },
+    { analyzer: melSpectrogramAnalyzer, label: 'Mel Spectrogram', width: 400, height: 250 },
+    { analyzer: fftAnalyzer, label: 'FFT', width: 400, height: 200 },
     { analyzer: waveletAnalyzer, label: 'Wavelet Transform', width: 400, height: 200 },
     { analyzer: envelopeAnalyzer, label: 'Waveform Envelope', width: 400, height: 150 },
     { analyzer: autocorrAnalyzer, label: 'Autocorrelation', width: 400, height: 200 },
@@ -131,8 +133,6 @@ function setupVisualizations() {
     { analyzer: flatnessAnalyzer, label: 'Spectral Flatness', width: 400, height: 150 },
     { analyzer: zcrAnalyzer, label: 'Zero Crossing Rate', width: 400, height: 150 },
     { analyzer: rmseAnalyzer, label: 'RMSE', width: 400, height: 150 },
-    { analyzer: melSpectrogramAnalyzer, label: 'Mel Spectrogram', width: 400, height: 250 },
-    { analyzer: fftAnalyzer, label: 'FFT', width: 400, height: 200 },
   ];
 
   analyzers.forEach((item, index) => {

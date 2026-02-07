@@ -14,6 +14,16 @@ pnpm add audio-ml
 
 **Works in both Web and Node.js environments!** This package is designed to be universal - use it in your browser-based applications or in Node.js server-side applications.
 
+## 🎬 Demo
+
+### Screenshot
+
+![Audio ML Screenshot](demo/Screenshot-audio-ml-js.png)
+
+### Screen Recording
+
+[📹 Watch Demo Video](demo/Screen-Recording-audio-ml-js.mp4)
+
 ## Overview
 
 This project provides a complete toolkit for analyzing audio signals in real-time, extracting various features that are essential for machine learning models in speech recognition, speaker identification, music information retrieval, and voice AI applications.
