@@ -9,6 +9,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: production  # Requires approval before publishing
     permissions:
       contents: write  # Required to create releases
       id-token: write  # Required for OIDC trusted publishing
@@ -24,11 +25,7 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-          # Use token for authentication (update NPM_TOKEN secret if expired)
-          # After first publish, you can switch to OIDC by:
-          # 1. Setting up trusted publisher on npmjs.com (Settings → Access Tokens → Add Trusted Publisher)
-          # 2. Removing the token line below
-          token: ${{ secrets.NPM_TOKEN }}
+          # Using OIDC for authentication (no token needed)
 
       - name: Enable Corepack (for Yarn)
         run: corepack enable
@@ -57,12 +54,10 @@ jobs:
           echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
 
       - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        # Token is also set in setup-node step above, but npm publish may need it in env too
-        # After first publish, set up OIDC trusted publishing on npmjs.com
-        # Then remove both token references
+        run: npm publish --access public --provenance
+        # Using OIDC authentication (configured in setup-node step)
+        # The --provenance flag enables package provenance attestation
+        # This provides cryptographic proof that the package was built in this CI/CD pipeline
 
       - name: Create git tag if it doesn't exist
         id: create-tag
