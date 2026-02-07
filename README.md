@@ -16,9 +16,8 @@ pnpm add audio-ml
 
 ## 🎬 Demo
 
-[![Audio ML Screenshot](demo/Screenshot-audio-ml-js.png)](demo/Screen-Recording-audio-ml-js.mp4)
+https://github.com/user-attachments/assets/aae5ff8c-120b-4c6c-a4d4-7348dacc3ca0
 
-*Click the screenshot above to watch the demo video*
 
 ## Overview
 
