@@ -2,6 +2,18 @@
 
 A comprehensive JavaScript/TypeScript library for real-time audio feature extraction, designed for machine learning applications, particularly voice AI systems.
 
+## 📦 Installation
+
+```bash
+npm install audio-ml
+# or
+yarn add audio-ml
+# or
+pnpm add audio-ml
+```
+
+**Works in both Web and Node.js environments!** This package is designed to be universal - use it in your browser-based applications or in Node.js server-side applications.
+
 ## Overview
 
 This project provides a complete toolkit for analyzing audio signals in real-time, extracting various features that are essential for machine learning models in speech recognition, speaker identification, music information retrieval, and voice AI applications.
@@ -47,12 +59,54 @@ This project provides a complete toolkit for analyzing audio signals in real-tim
 
 ## Getting Started
 
-### Installation
+### Using the Package
 
-```bash
-npm install
-# or
-yarn install
+The `audio-ml` package can be used in both **web browsers** and **Node.js** environments:
+
+#### Web Browser Usage
+
+```typescript
+import { FFTAnalyzer, MFCCAnalyzer } from 'audio-ml';
+
+// Create analyzers
+const fftAnalyzer = new FFTAnalyzer({ 
+  sampleRate: 44100, 
+  fftSize: 1024 
+});
+
+// Use with Web Audio API
+const audioContext = new AudioContext();
+const processor = audioContext.createScriptProcessor(1024, 1, 1);
+
+processor.onaudioprocess = (event) => {
+  const pcm = event.inputBuffer.getChannelData(0);
+  const spectrum = fftAnalyzer.analyzeFrame(pcm);
+  // Process your features...
+};
+```
+
+#### Node.js Usage
+
+```typescript
+import { FFTAnalyzer, MFCCAnalyzer } from 'audio-ml';
+import { readFileSync } from 'fs';
+import { decode } from 'audio-decode'; // or similar audio decoder
+
+// Load and decode audio file
+const audioBuffer = await decode(readFileSync('audio.wav'));
+
+// Create analyzer
+const mfccAnalyzer = new MFCCAnalyzer({ 
+  sampleRate: audioBuffer.sampleRate 
+});
+
+// Process audio frames
+const frameSize = 1024;
+for (let i = 0; i < audioBuffer.length; i += frameSize) {
+  const frame = audioBuffer.getChannelData(0).subarray(i, i + frameSize);
+  const features = mfccAnalyzer.analyzeFrame(frame);
+  // Use features for ML models...
+}
 ```
 
 ### Development
@@ -97,48 +151,26 @@ Each analyzer is a self-contained class that:
 ### Basic Usage
 
 ```typescript
-import { FFTAnalyzer } from './analysis/FFTAnalyzer';
-import { MFCCAnalyzer } from './analysis/MFCCAnalyzer';
-import { visualizeFFT } from './visualizations/analyzerVisualizers';
+import { FFTAnalyzer, MFCCAnalyzer } from 'audio-ml';
 
-// Create analyzer
+// Create analyzers
 const fftAnalyzer = new FFTAnalyzer({ 
   sampleRate: 44100, 
   fftSize: 1024 
 });
 
+const mfccAnalyzer = new MFCCAnalyzer({ 
+  sampleRate: 44100 
+});
+
 // Analyze a frame
 const pcmFrame = new Float32Array(1024); // Your audio data
 const spectrum = fftAnalyzer.analyzeFrame(pcmFrame);
+const mfccFeatures = mfccAnalyzer.analyzeFrame(pcmFrame);
 
-// Visualize
-const canvas = document.createElement('canvas');
-visualizeFFT(canvas, spectrum);
-```
-
-### Using VisualizationManager
-
-```typescript
-import { VisualizationManager } from './visualizations';
-import { FFTAnalyzer } from './analysis/FFTAnalyzer';
-
-const container = document.getElementById('app')!;
-const manager = new VisualizationManager(container);
-
-const analyzer = new FFTAnalyzer({ sampleRate: 44100 });
-const canvas = document.createElement('canvas');
-canvas.width = 400;
-canvas.height = 200;
-
-manager.addVisualization(analyzer, canvas, 'FFT', { 
-  color: '#00ff00' 
-});
-
-// Update with audio data
-processor.onaudioprocess = (event) => {
-  const pcm = event.inputBuffer.getChannelData(0);
-  manager.update(pcm);
-};
+// Use the features for your ML model or further processing
+console.log('FFT Spectrum:', spectrum);
+console.log('MFCC Features:', mfccFeatures);
 ```
 
 ## Analyzers Reference
@@ -187,11 +219,19 @@ processor.onaudioprocess = (event) => {
 - **TypeScript** - Type-safe JavaScript
 - **Vite** - Build tool and dev server
 
-## Browser Compatibility
+## Platform Support
 
+### Web Browser
 - Modern browsers with Web Audio API support
 - Microphone access required for real-time analysis
 - Canvas API for visualizations
+- Works with ES modules and bundlers (Vite, Webpack, Rollup, etc.)
+
+### Node.js
+- Node.js 18.0.0 or higher
+- Works with CommonJS and ES modules
+- Compatible with audio decoding libraries (node-wav, audio-decode, etc.)
+- Perfect for server-side audio processing and ML pipelines
 
 ## Contributing
 
@@ -205,7 +245,7 @@ This project is designed to be extensible. To add a new analyzer:
 
 ## License
 
-MIT
+MIT - See [LICENSE](LICENSE) file for details
 
 ## Resources
 
