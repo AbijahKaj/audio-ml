@@ -21,9 +21,9 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-        env:
           # For first publish, you need a token. After setting up OIDC, remove this.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # To use OIDC instead, remove the token line and ensure OIDC is configured on npmjs.com
+          token: ${{ secrets.NPM_TOKEN }}
 
       - name: Enable Corepack (for Yarn)
         run: corepack enable
