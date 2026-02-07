@@ -10,6 +10,10 @@
       "import": "./dist/analysis/index.js",
       "types": "./dist/analysis/index.d.ts"
     },
+    "./applications": {
+      "import": "./dist/applications/index.js",
+      "types": "./dist/applications/index.d.ts"
+    },
     "./package.json": "./package.json"
   },
   "files": [
