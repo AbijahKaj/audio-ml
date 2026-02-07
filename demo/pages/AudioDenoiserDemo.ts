@@ -6,6 +6,8 @@
 import { AudioDenoiser } from '../../src/applications/processing/AudioDenoiser';
 import { AudioInput } from '../components/AudioInput';
 import { AudioInputUI } from '../components/AudioInputUI';
+// @ts-expect-error - audiobuffer-to-wav doesn't have type definitions
+import { toWav } from 'audiobuffer-to-wav';
 
 const sampleRate = 44100;
 const fftSize = 2048;
@@ -15,12 +17,18 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   let audioInput: AudioInput | null = null;
   let isRecording: boolean = false;
 
-  // Create audio input
+  // Create audio input with correct frame size for denoiser
   audioInput = new AudioInput(sampleRate);
+  audioInput.setTargetFrameSize(fftSize); // Set to match denoiser's FFT size
   new AudioInputUI(container, audioInput);
 
-  // Create denoiser
-  denoiser = new AudioDenoiser({ sampleRate, fftSize });
+  // Create denoiser with more lenient noise estimation
+  denoiser = new AudioDenoiser({ 
+    sampleRate, 
+    fftSize,
+    noiseEstimationFrames: 8, // Reduced from 10 for faster estimation
+    noiseEstimationThreshold: 0.02 // Slightly higher threshold
+  });
 
   // Create controls container
   const controlsContainer = document.createElement('div');
@@ -41,7 +49,7 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   const statusLabel = document.createElement('div');
   statusLabel.id = 'denoiser-status';
   statusLabel.className = 'denoiser-status';
-  statusLabel.textContent = 'Waiting for noise estimation...';
+  statusLabel.textContent = 'Start audio input first, then wait for noise estimation (record 2-3 seconds of silence/noise)...';
   controlsContainer.appendChild(statusLabel);
 
   const snrLabel = document.createElement('div');
@@ -60,6 +68,21 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   recordingsTitle.className = 'denoiser-recordings-title';
   recordingsContainer.appendChild(recordingsTitle);
 
+  // Add instructions
+  const instructions = document.createElement('div');
+  instructions.className = 'denoiser-status';
+  instructions.style.cssText = 'margin-top: 0.5rem; font-size: 0.85rem; line-height: 1.4; color: #aaa;';
+  instructions.innerHTML = `
+    <strong style="color: #fff;">How to use:</strong><br>
+    1. Click "Start Recording" above to start audio input<br>
+    2. Record 2-3 seconds of silence/background noise (for noise estimation)<br>
+    3. Wait for "Noise estimated!" message<br>
+    4. Click "Start Recording Denoised Audio" to record denoised output<br>
+    5. Speak or play audio - it will be denoised in real-time<br>
+    6. Stop recording to save the denoised audio file
+  `;
+  controlsContainer.appendChild(instructions);
+
   // Store denoised frames for recording
   const denoisedFrames: Float32Array[] = [];
 
@@ -67,16 +90,42 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   const recordingPcmHandler = async (pcm: Float32Array) => {
     if (!denoiser) return;
     
-    const result = denoiser.processFrame(pcm);
-    
-    // Update status
-    if (result.snr > 0) {
-      snrLabel.textContent = `SNR: ${result.snr.toFixed(1)} dB | Noise Reduction: ${Math.round(result.noiseReduction * 100)}%`;
+    // Ensure frame is the right size for denoiser (2048)
+    let frame = pcm;
+    if (pcm.length !== fftSize) {
+      frame = new Float32Array(fftSize);
+      if (pcm.length < fftSize) {
+        frame.set(pcm, 0);
+      } else {
+        frame.set(pcm.subarray(0, fftSize), 0);
+      }
     }
+    
+    try {
+      const result = denoiser.processFrame(frame);
+      
+      // Update status
+      if (result.snr > 0) {
+        snrLabel.textContent = `SNR: ${result.snr.toFixed(1)} dB | Noise Reduction: ${Math.round(result.noiseReduction * 100)}%`;
+      }
 
-    // Collect denoised frames if recording
-    if (isRecording) {
-      denoisedFrames.push(new Float32Array(result.audio));
+      // Collect denoised frames if recording AND noise estimation is complete
+      // Only collect frames that have been actually denoised (snr > 0 means denoising is active)
+      if (isRecording) {
+        if (result.snr > 0) {
+          // This frame was denoised - collect it
+          // Check if audio has actual content (not all zeros or very quiet)
+          const maxAmplitude = Math.max(...Array.from(result.audio).map(s => Math.abs(s)));
+          if (maxAmplitude > 0.0001) {
+            denoisedFrames.push(new Float32Array(result.audio));
+          }
+        } else {
+          // Noise estimation not complete yet - don't collect
+          // This shouldn't happen if we check before starting, but just in case
+        }
+      }
+    } catch (error) {
+      console.error('Error processing frame in denoiser:', error);
     }
   };
 
@@ -84,10 +133,19 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
 
   // Helper function to process and save recording
   const processRecording = async () => {
-    if (!isRecording || denoisedFrames.length === 0) return;
+    if (!isRecording) return;
     
+    // Stop recording first
     isRecording = false;
     recordButton.textContent = 'Start Recording Denoised Audio';
+    recordButton.disabled = false; // Re-enable button
+    
+    if (denoisedFrames.length === 0) {
+      statusLabel.textContent = 'No audio recorded. Make sure you spoke/played audio after starting recording.';
+      statusLabel.className = 'denoiser-status error';
+      return;
+    }
+    
     statusLabel.textContent = 'Processing recording...';
     statusLabel.className = 'denoiser-status';
 
@@ -98,8 +156,9 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
       // Calculate total length (accounting for potential frame size differences)
       const totalLength = denoisedFrames.reduce((sum, frame) => sum + frame.length, 0);
       
-      if (totalLength === 0) {
-        statusLabel.textContent = 'No audio recorded.';
+      if (totalLength === 0 || denoisedFrames.length === 0) {
+        statusLabel.textContent = `No audio recorded. Collected ${denoisedFrames.length} frames. Make sure you spoke/played audio after starting recording.`;
+        statusLabel.className = 'denoiser-status error';
         return;
       }
 
@@ -113,8 +172,22 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
         offset += frame.length;
       }
 
-      // Convert to WAV
-      const wav = audioBufferToWav(audioBuffer);
+      // Normalize audio to prevent clipping and ensure audible output
+      let maxAmplitude = 0;
+      for (let i = 0; i < channelData.length; i++) {
+        maxAmplitude = Math.max(maxAmplitude, Math.abs(channelData[i]));
+      }
+      
+      // Normalize to 80% of max to prevent clipping
+      if (maxAmplitude > 0) {
+        const normalizationFactor = 0.8 / maxAmplitude;
+        for (let i = 0; i < channelData.length; i++) {
+          channelData[i] *= normalizationFactor;
+        }
+      }
+
+      // Convert to WAV using library
+      const wav = toWav(audioBuffer);
       const blob = new Blob([wav], { type: 'audio/wav' });
       const url = URL.createObjectURL(blob);
       
@@ -164,9 +237,22 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
     }
   });
 
+  // Start denoiser when audio input starts
+  audioInput.on('start', () => {
+    denoiser?.start();
+    denoiser?.reset(); // Reset to start fresh noise estimation
+    statusLabel.textContent = 'Recording... Stay quiet for 2-3 seconds to estimate background noise.';
+    statusLabel.className = 'denoiser-status recording';
+  });
+
   // Denoiser event handlers
+  denoiser.on('noise-estimation-progress', (data: { progress: number; frames: number }) => {
+    statusLabel.textContent = `Estimating noise... ${Math.round(data.progress)}% (${data.frames}/10 frames)`;
+    statusLabel.className = 'denoiser-status recording';
+  });
+
   denoiser.on('noise-estimated', () => {
-    statusLabel.textContent = 'Noise estimated. Ready to denoise.';
+    statusLabel.textContent = '✅ Noise estimated! You can now record denoised audio.';
     statusLabel.className = 'denoiser-status ready';
     recordButton.disabled = false;
   });
@@ -178,14 +264,25 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   // Recording functionality
   recordButton.addEventListener('click', async () => {
     if (!isRecording) {
+      // Check if noise estimation is complete
+      if (!denoiser || !(denoiser as any).isNoiseEstimationComplete) {
+        statusLabel.textContent = '⚠️ Noise estimation not complete yet. Wait for "Noise estimated!" message.';
+        statusLabel.className = 'denoiser-status error';
+        return;
+      }
+      
       // Start recording
       denoisedFrames.length = 0;
       isRecording = true;
       recordButton.textContent = 'Stop Recording';
-      statusLabel.textContent = 'Recording denoised audio...';
+      statusLabel.textContent = 'Recording denoised audio... Speak or play audio now.';
       statusLabel.className = 'denoiser-status recording';
     } else {
       // Stop recording manually (user clicked button)
+      // Stop immediately to prevent further frame collection
+      isRecording = false;
+      recordButton.textContent = 'Start Recording Denoised Audio';
+      recordButton.disabled = false;
       await processRecording();
     }
   });
@@ -200,49 +297,3 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   };
 }
 
-// Helper function to convert AudioBuffer to WAV
-function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
-  const length = buffer.length;
-  const numberOfChannels = buffer.numberOfChannels;
-  const sampleRate = buffer.sampleRate;
-  const arrayBuffer = new ArrayBuffer(44 + length * numberOfChannels * 2);
-  const view = new DataView(arrayBuffer);
-  const channels: Float32Array[] = [];
-  
-  for (let i = 0; i < numberOfChannels; i++) {
-    channels.push(buffer.getChannelData(i));
-  }
-
-  // WAV header
-  const writeString = (offset: number, string: string) => {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  };
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + length * numberOfChannels * 2, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numberOfChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * numberOfChannels * 2, true);
-  view.setUint16(32, numberOfChannels * 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, 'data');
-  view.setUint32(40, length * numberOfChannels * 2, true);
-
-  // Convert float samples to 16-bit PCM
-  let offset = 44;
-  for (let i = 0; i < length; i++) {
-    for (let channel = 0; channel < numberOfChannels; channel++) {
-      const sample = Math.max(-1, Math.min(1, channels[channel][i]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
-      offset += 2;
-    }
-  }
-
-  return arrayBuffer;
-}

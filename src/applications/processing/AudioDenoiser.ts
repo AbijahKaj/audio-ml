@@ -98,12 +98,21 @@ export class AudioDenoiser extends BaseApplication {
 
     // Estimate noise if not done yet
     if (!this.isNoiseEstimationComplete) {
-      const rmse = this.rmse.analyzeFrame(pcm);
-      const flatness = this.spectralFlatness.analyzeFrame(pcm);
+      // Use windowed frame for analysis (better for spectral features)
+      const rmse = this.rmse.analyzeFrame(windowed);
+      const flatness = this.spectralFlatness.analyzeFrame(windowed);
 
       // Consider it noise if low energy and high flatness
-      if (rmse < this.noiseEstimationThreshold && flatness > 0.7) {
+      // Made thresholds more lenient: 3x energy threshold, lower flatness requirement (0.4)
+      // This makes it easier to detect background noise
+      const isNoiseFrame = rmse < this.noiseEstimationThreshold * 3 && flatness > 0.4;
+      
+      if (isNoiseFrame) {
         this.noiseEstimationBuffer.push(new Float32Array(magnitudes));
+        
+        // Emit progress update every frame
+        const progress = Math.min(100, (this.noiseEstimationBuffer.length / this.noiseEstimationFrames) * 100);
+        this.emit('noise-estimation-progress', { progress, frames: this.noiseEstimationBuffer.length });
         
         if (this.noiseEstimationBuffer.length >= this.noiseEstimationFrames) {
           // Average noise spectrum
@@ -118,6 +127,13 @@ export class AudioDenoiser extends BaseApplication {
           this.isNoiseEstimationComplete = true;
           this.emit('noise-estimated', { spectrum: this.noiseSpectrum });
         }
+      } else {
+        // Only reset buffer if we have very few frames (less than 2)
+        // This allows for occasional non-noise frames without losing progress
+        if (this.noiseEstimationBuffer.length < 2) {
+          this.noiseEstimationBuffer = [];
+        }
+        // Otherwise keep the buffer and continue - we'll accept frames that are "close enough"
       }
     }
 
