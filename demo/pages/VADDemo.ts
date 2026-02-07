@@ -15,7 +15,7 @@ export function createVADDemo(container: HTMLElement): () => void {
   let logContainer: HTMLDivElement | null = null;
 
   // Create audio input
-  audioInput = new AudioInput(sampleRate, 1024);
+  audioInput = new AudioInput(sampleRate);
   new AudioInputUI(container, audioInput);
 
   // Create VAD with more sensitive speech-end detection

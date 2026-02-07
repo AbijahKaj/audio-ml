@@ -33,7 +33,7 @@ export function createAnalyzersDemo(container: HTMLElement): () => void {
   let analyzerFrameSizes: Map<any, number> = new Map();
 
   // Create audio input component
-  audioInput = new AudioInput(sampleRate, fftSize);
+  audioInput = new AudioInput(sampleRate);
   
   // Create audio input UI (creates UI elements)
   new AudioInputUI(container, audioInput);

@@ -15,7 +15,7 @@ export function createBeepDetectorDemo(container: HTMLElement): () => void {
   let statsContainer: HTMLDivElement | null = null;
 
   // Create audio input
-  audioInput = new AudioInput(sampleRate, 2048);
+  audioInput = new AudioInput(sampleRate);
   new AudioInputUI(container, audioInput);
 
   // Create beep detector

@@ -3,8 +3,8 @@
  * Detects voicemail beeps and tones using frequency analysis
  */
 
-import { BaseApplication, ApplicationConfig } from '../base/BaseApplication';
-import { BeepDetectionResult } from '../base/types';
+import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication';
+import { type BeepDetectionResult } from '../base/types';
 import { FFTAnalyzer } from '../../analysis/FFTAnalyzer';
 import { SpectralCentroidAnalyzer } from '../../analysis/SpectralCentroidAnalyzer';
 

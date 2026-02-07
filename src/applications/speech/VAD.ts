@@ -3,8 +3,8 @@
  * Detects when speech is present vs silence/noise using multiple audio features
  */
 
-import { BaseApplication, ApplicationConfig } from '../base/BaseApplication';
-import { VADResult } from '../base/types';
+import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication';
+import { type VADResult } from '../base/types';
 import { RMSEAnalyzer } from '../../analysis/RMSEAnalyzer';
 import { ZeroCrossingRateAnalyzer } from '../../analysis/ZeroCrossingRateAnalyzer';
 import { SpectralFlatnessAnalyzer } from '../../analysis/SpectralFlatnessAnalyzer';

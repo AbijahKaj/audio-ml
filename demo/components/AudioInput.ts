@@ -17,17 +17,42 @@ export class AudioInput {
   private mode: AudioInputMode = 'microphone';
   private isActive: boolean = false;
   private audioCtx: AudioContext | null = null;
-  private processor: ScriptProcessorNode | null = null;
+  private workletNode: AudioWorkletNode | null = null;
   private stream: MediaStream | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private listeners: Map<string, Set<Function>> = new Map();
   private sampleRate: number = 44100;
-  private bufferSize: number = 4096;
+  private workletReady: Promise<void> | null = null;
+  private frameBuffer: Float32Array = new Float32Array(0);
+  private targetFrameSize: number = 1024; // Default target frame size for analyzers
 
-  constructor(sampleRate: number = 44100, bufferSize: number = 4096) {
+  constructor(sampleRate: number = 44100) {
     this.sampleRate = sampleRate;
-    this.bufferSize = bufferSize;
+    // Initialize AudioWorklet module loading
+    this.initializeWorklet();
+  }
+
+  /**
+   * Initialize AudioWorklet processor
+   */
+  private async initializeWorklet(): Promise<void> {
+    if (this.workletReady) {
+      return this.workletReady;
+    }
+
+    // Create a temporary context to load the worklet
+    const tempCtx = new AudioContext({ sampleRate: this.sampleRate });
+    this.workletReady = tempCtx.audioWorklet.addModule(
+      new URL('./pcm-processor.js', import.meta.url)
+    ).then(() => {
+      tempCtx.close();
+    }).catch((error) => {
+      console.error('Failed to load AudioWorklet processor:', error);
+      throw error;
+    });
+
+    return this.workletReady;
   }
 
   /**
@@ -77,6 +102,9 @@ export class AudioInput {
     }
 
     try {
+      // Ensure worklet is loaded
+      await this.initializeWorklet();
+
       this.mode = 'microphone';
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -88,20 +116,30 @@ export class AudioInput {
       });
 
       this.audioCtx = new AudioContext({ sampleRate: this.sampleRate });
+      
+      // Load worklet module for this context
+      await this.audioCtx.audioWorklet.addModule(
+        new URL('./pcm-processor.js', import.meta.url)
+      );
+
       const source = this.audioCtx.createMediaStreamSource(this.stream);
 
-      this.processor = this.audioCtx.createScriptProcessor(this.bufferSize, 1, 1);
-      source.connect(this.processor);
-      this.processor.connect(this.audioCtx.destination);
-
-      this.processor.onaudioprocess = (event) => {
-        if (this.isActive) {
-          const input = event.inputBuffer.getChannelData(0);
-          // Create a copy to avoid issues with buffer reuse
-          const pcm = new Float32Array(input);
-          this.emit('pcm-data', pcm, this.sampleRate);
+      // Create AudioWorkletNode instead of ScriptProcessorNode
+      this.workletNode = new AudioWorkletNode(this.audioCtx, 'pcm-processor');
+      
+      // Set up message handler to receive PCM data
+      this.workletNode.port.onmessage = (event) => {
+        if (event.data.type === 'pcm-data' && this.isActive) {
+          const pcm = new Float32Array(event.data.data);
+          this.bufferAndEmitFrames(pcm, event.data.sampleRate || this.sampleRate);
         }
       };
+
+      source.connect(this.workletNode);
+      this.workletNode.connect(this.audioCtx.destination);
+
+      // Start the processor
+      this.workletNode.port.postMessage({ type: 'start' });
 
       this.isActive = true;
       this.emit('start');
@@ -121,12 +159,18 @@ export class AudioInput {
     }
 
     try {
+      // Ensure worklet is loaded
+      await this.initializeWorklet();
+
       this.mode = 'file';
       
-      // Decode audio file
-      const arrayBuffer = await file.arrayBuffer();
+      // Create audio context
       this.audioCtx = new AudioContext({ sampleRate: this.sampleRate });
-      const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+
+      // Load worklet module for this context
+      await this.audioCtx.audioWorklet.addModule(
+        new URL('./pcm-processor.js', import.meta.url)
+      );
 
       // Create audio element for playback
       const audioUrl = URL.createObjectURL(file);
@@ -136,19 +180,22 @@ export class AudioInput {
       // Create source from audio element
       this.sourceNode = this.audioCtx.createMediaElementSource(this.audioElement);
       
-      // Create processor to capture PCM data
-      this.processor = this.audioCtx.createScriptProcessor(this.bufferSize, 1, 1);
-      this.sourceNode.connect(this.processor);
-      this.processor.connect(this.audioCtx.destination);
-
-      // Handle PCM data
-      this.processor.onaudioprocess = (event) => {
-        if (this.isActive && !this.audioElement?.paused) {
-          const input = event.inputBuffer.getChannelData(0);
-          const pcm = new Float32Array(input);
-          this.emit('pcm-data', pcm, this.audioCtx!.sampleRate);
+      // Create AudioWorkletNode instead of ScriptProcessorNode
+      this.workletNode = new AudioWorkletNode(this.audioCtx, 'pcm-processor');
+      
+      // Set up message handler to receive PCM data
+      this.workletNode.port.onmessage = (event) => {
+        if (event.data.type === 'pcm-data' && this.isActive && !this.audioElement?.paused) {
+          const pcm = new Float32Array(event.data.data);
+          this.bufferAndEmitFrames(pcm, event.data.sampleRate || this.audioCtx!.sampleRate);
         }
       };
+
+      this.sourceNode.connect(this.workletNode);
+      this.workletNode.connect(this.audioCtx.destination);
+
+      // Start the processor
+      this.workletNode.port.postMessage({ type: 'start' });
 
       // Handle playback end
       this.audioElement.addEventListener('ended', () => {
@@ -172,9 +219,17 @@ export class AudioInput {
   async stop(): Promise<void> {
     this.isActive = false;
 
-    if (this.processor) {
-      this.processor.disconnect();
-      this.processor = null;
+    // Emit any remaining buffered data
+    if (this.frameBuffer.length > 0) {
+      this.emit('pcm-data', new Float32Array(this.frameBuffer), this.sampleRate);
+      this.frameBuffer = new Float32Array(0);
+    }
+
+    if (this.workletNode) {
+      // Stop the processor
+      this.workletNode.port.postMessage({ type: 'stop' });
+      this.workletNode.disconnect();
+      this.workletNode = null;
     }
 
     if (this.mode === 'microphone') {
@@ -221,5 +276,33 @@ export class AudioInput {
    */
   getSampleRate(): number {
     return this.audioCtx?.sampleRate || this.sampleRate;
+  }
+
+  /**
+   * Buffer small frames and emit larger frames for analyzers
+   */
+  private bufferAndEmitFrames(pcm: Float32Array, sampleRate: number): void {
+    // Append new data to buffer
+    const newBuffer = new Float32Array(this.frameBuffer.length + pcm.length);
+    newBuffer.set(this.frameBuffer, 0);
+    newBuffer.set(pcm, this.frameBuffer.length);
+    this.frameBuffer = newBuffer;
+
+    // Emit frames when we have enough data
+    while (this.frameBuffer.length >= this.targetFrameSize) {
+      const frame = this.frameBuffer.subarray(0, this.targetFrameSize);
+      this.emit('pcm-data', new Float32Array(frame), sampleRate);
+      
+      // Keep remaining data in buffer
+      this.frameBuffer = this.frameBuffer.subarray(this.targetFrameSize);
+    }
+  }
+
+  /**
+   * Set target frame size for buffering (default: 1024)
+   */
+  setTargetFrameSize(size: number): void {
+    this.targetFrameSize = size;
+    this.frameBuffer = new Float32Array(0); // Reset buffer when changing size
   }
 }

@@ -16,7 +16,7 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   let isRecording: boolean = false;
 
   // Create audio input
-  audioInput = new AudioInput(sampleRate, fftSize);
+  audioInput = new AudioInput(sampleRate);
   new AudioInputUI(container, audioInput);
 
   // Create denoiser
@@ -62,7 +62,6 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
 
   // Store denoised frames for recording
   const denoisedFrames: Float32Array[] = [];
-  let recordingStartTime: number = 0;
 
   // PCM handler that processes audio and collects denoised frames when recording
   const recordingPcmHandler = async (pcm: Float32Array) => {
@@ -83,6 +82,88 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
 
   audioInput.on('pcm-data', recordingPcmHandler);
 
+  // Helper function to process and save recording
+  const processRecording = async () => {
+    if (!isRecording || denoisedFrames.length === 0) return;
+    
+    isRecording = false;
+    recordButton.textContent = 'Start Recording Denoised Audio';
+    statusLabel.textContent = 'Processing recording...';
+    statusLabel.className = 'denoiser-status';
+
+    try {
+      // Create audio context for reconstruction
+      const ctx = new AudioContext({ sampleRate });
+      
+      // Calculate total length (accounting for potential frame size differences)
+      const totalLength = denoisedFrames.reduce((sum, frame) => sum + frame.length, 0);
+      
+      if (totalLength === 0) {
+        statusLabel.textContent = 'No audio recorded.';
+        return;
+      }
+
+      // Create AudioBuffer and copy frames
+      const audioBuffer = ctx.createBuffer(1, totalLength, ctx.sampleRate);
+      const channelData = audioBuffer.getChannelData(0);
+      let offset = 0;
+      
+      for (const frame of denoisedFrames) {
+        channelData.set(frame, offset);
+        offset += frame.length;
+      }
+
+      // Convert to WAV
+      const wav = audioBufferToWav(audioBuffer);
+      const blob = new Blob([wav], { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create audio player
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.src = url;
+      audio.className = 'denoiser-recording-audio';
+      
+      // Create download link
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+      downloadLink.download = `denoised-${Date.now()}.wav`;
+      downloadLink.textContent = 'Download Denoised Audio';
+      downloadLink.className = 'denoiser-download-link';
+      
+      // Create recording entry
+      const recordingDiv = document.createElement('div');
+      recordingDiv.className = 'denoiser-recording-entry';
+      
+      const recordingInfo = document.createElement('div');
+      recordingInfo.className = 'denoiser-recording-info';
+      recordingInfo.textContent = `Duration: ${(totalLength / ctx.sampleRate).toFixed(2)}s | ${denoisedFrames.length} frames`;
+      recordingDiv.appendChild(recordingInfo);
+      recordingDiv.appendChild(audio);
+      recordingDiv.appendChild(downloadLink);
+      
+      recordingsContainer.appendChild(recordingDiv);
+
+      statusLabel.textContent = 'Recording saved!';
+      statusLabel.className = 'denoiser-status ready';
+
+      await ctx.close();
+    } catch (error) {
+      console.error('Error processing recording:', error);
+      statusLabel.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      statusLabel.className = 'denoiser-status error';
+    }
+  };
+
+  // Auto-process recording when audio input stops
+  audioInput.on('stop', async () => {
+    if (isRecording) {
+      // Wait a bit to ensure all pending frames are processed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await processRecording();
+    }
+  });
+
   // Denoiser event handlers
   denoiser.on('noise-estimated', () => {
     statusLabel.textContent = 'Noise estimated. Ready to denoise.';
@@ -99,80 +180,13 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
     if (!isRecording) {
       // Start recording
       denoisedFrames.length = 0;
-      recordingStartTime = Date.now();
       isRecording = true;
       recordButton.textContent = 'Stop Recording';
       statusLabel.textContent = 'Recording denoised audio...';
       statusLabel.className = 'denoiser-status recording';
     } else {
-      // Stop recording and create audio file
-      isRecording = false;
-      recordButton.textContent = 'Start Recording Denoised Audio';
-      statusLabel.textContent = 'Processing recording...';
-      statusLabel.className = 'denoiser-status';
-
-      try {
-        // Create audio context for reconstruction
-        const ctx = new AudioContext({ sampleRate });
-        
-        // Calculate total length (accounting for potential frame size differences)
-        const totalLength = denoisedFrames.reduce((sum, frame) => sum + frame.length, 0);
-        
-        if (totalLength === 0) {
-          statusLabel.textContent = 'No audio recorded.';
-          return;
-        }
-
-        // Create AudioBuffer and copy frames
-        const audioBuffer = ctx.createBuffer(1, totalLength, ctx.sampleRate);
-        const channelData = audioBuffer.getChannelData(0);
-        let offset = 0;
-        
-        for (const frame of denoisedFrames) {
-          channelData.set(frame, offset);
-          offset += frame.length;
-        }
-
-        // Convert to WAV
-        const wav = audioBufferToWav(audioBuffer);
-        const blob = new Blob([wav], { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-        
-        // Create audio player
-        const audio = document.createElement('audio');
-        audio.controls = true;
-        audio.src = url;
-        audio.className = 'denoiser-recording-audio';
-        
-        // Create download link
-        const downloadLink = document.createElement('a');
-        downloadLink.href = url;
-        downloadLink.download = `denoised-${Date.now()}.wav`;
-        downloadLink.textContent = 'Download Denoised Audio';
-        downloadLink.className = 'denoiser-download-link';
-        
-        // Create recording entry
-        const recordingDiv = document.createElement('div');
-        recordingDiv.className = 'denoiser-recording-entry';
-        
-        const recordingInfo = document.createElement('div');
-        recordingInfo.className = 'denoiser-recording-info';
-        recordingInfo.textContent = `Duration: ${(totalLength / ctx.sampleRate).toFixed(2)}s | ${denoisedFrames.length} frames`;
-        recordingDiv.appendChild(recordingInfo);
-        recordingDiv.appendChild(audio);
-        recordingDiv.appendChild(downloadLink);
-        
-        recordingsContainer.appendChild(recordingDiv);
-
-        statusLabel.textContent = 'Recording saved!';
-        statusLabel.className = 'denoiser-status ready';
-
-        await ctx.close();
-      } catch (error) {
-        console.error('Error processing recording:', error);
-        statusLabel.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-        statusLabel.className = 'denoiser-status error';
-      }
+      // Stop recording manually (user clicked button)
+      await processRecording();
     }
   });
 
