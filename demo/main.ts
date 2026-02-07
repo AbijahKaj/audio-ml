@@ -1,20 +1,20 @@
 import { VisualizationManager } from './visualizations';
-import { MFCCAnalyzer } from './analysis/MFCCAnalyzer';
-import { PLPAnalyzer } from './analysis/PLPAnalyzer';
-import { ChromaFeaturesAnalyzer } from './analysis/ChromaFeaturesAnalyzer';
-import { LPCAnalyzer } from './analysis/LPCAnalyzer';
-import { ConstantQTransformAnalyzer } from './analysis/ConstantQTransformAnalyzer';
-import { WaveletTransformAnalyzer } from './analysis/WaveletTransformAnalyzer';
-import { WaveformEnvelopeAnalyzer } from './analysis/WaveformEnvelopeAnalyzer';
-import { AutocorrelationAnalyzer } from './analysis/AutocorrelationAnalyzer';
-import { SpectralCentroidAnalyzer } from './analysis/SpectralCentroidAnalyzer';
-import { SpectralRolloffAnalyzer } from './analysis/SpectralRolloffAnalyzer';
-import { SpectralBandwidthAnalyzer } from './analysis/SpectralBandwidthAnalyzer';
-import { SpectralFlatnessAnalyzer } from './analysis/SpectralFlatnessAnalyzer';
-import { ZeroCrossingRateAnalyzer } from './analysis/ZeroCrossingRateAnalyzer';
-import { RMSEAnalyzer } from './analysis/RMSEAnalyzer';
-import { MelSpectrogramAnalyzer } from './analysis/MelSpectrogramAnalyzer';
-import { FFTAnalyzer } from './analysis/FFTAnalyzer';
+import { MFCCAnalyzer } from '../src/analysis/MFCCAnalyzer';
+import { PLPAnalyzer } from '../src/analysis/PLPAnalyzer';
+import { ChromaFeaturesAnalyzer } from '../src/analysis/ChromaFeaturesAnalyzer';
+import { LPCAnalyzer } from '../src/analysis/LPCAnalyzer';
+import { ConstantQTransformAnalyzer } from '../src/analysis/ConstantQTransformAnalyzer';
+import { WaveletTransformAnalyzer } from '../src/analysis/WaveletTransformAnalyzer';
+import { WaveformEnvelopeAnalyzer } from '../src/analysis/WaveformEnvelopeAnalyzer';
+import { AutocorrelationAnalyzer } from '../src/analysis/AutocorrelationAnalyzer';
+import { SpectralCentroidAnalyzer } from '../src/analysis/SpectralCentroidAnalyzer';
+import { SpectralRolloffAnalyzer } from '../src/analysis/SpectralRolloffAnalyzer';
+import { SpectralBandwidthAnalyzer } from '../src/analysis/SpectralBandwidthAnalyzer';
+import { SpectralFlatnessAnalyzer } from '../src/analysis/SpectralFlatnessAnalyzer';
+import { ZeroCrossingRateAnalyzer } from '../src/analysis/ZeroCrossingRateAnalyzer';
+import { RMSEAnalyzer } from '../src/analysis/RMSEAnalyzer';
+import { MelSpectrogramAnalyzer } from '../src/analysis/MelSpectrogramAnalyzer';
+import { FFTAnalyzer } from '../src/analysis/FFTAnalyzer';
 
 // Module-level variables
 let gridContainer: HTMLDivElement | null = null;
