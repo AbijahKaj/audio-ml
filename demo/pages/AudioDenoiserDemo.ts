@@ -6,8 +6,6 @@
 import { AudioDenoiser } from '../../src/applications/processing/AudioDenoiser';
 import { AudioInput } from '../components/AudioInput';
 import { AudioInputUI } from '../components/AudioInputUI';
-// @ts-expect-error - audiobuffer-to-wav doesn't have type definitions
-import { toWav } from 'audiobuffer-to-wav';
 
 const sampleRate = 44100;
 const fftSize = 2048;
@@ -109,20 +107,12 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
         snrLabel.textContent = `SNR: ${result.snr.toFixed(1)} dB | Noise Reduction: ${Math.round(result.noiseReduction * 100)}%`;
       }
 
-      // Collect denoised frames if recording AND noise estimation is complete
-      // Only collect frames that have been actually denoised (snr > 0 means denoising is active)
+      // Collect denoised frames if recording
+      // Collect all frames when recording (both denoised and silence/noise frames)
       if (isRecording) {
-        if (result.snr > 0) {
-          // This frame was denoised - collect it
-          // Check if audio has actual content (not all zeros or very quiet)
-          const maxAmplitude = Math.max(...Array.from(result.audio).map(s => Math.abs(s)));
-          if (maxAmplitude > 0.0001) {
-            denoisedFrames.push(new Float32Array(result.audio));
-          }
-        } else {
-          // Noise estimation not complete yet - don't collect
-          // This shouldn't happen if we check before starting, but just in case
-        }
+        // Always collect frames when recording, regardless of SNR
+        // This ensures we capture the full audio, including silence periods
+        denoisedFrames.push(new Float32Array(result.audio));
       }
     } catch (error) {
       console.error('Error processing frame in denoiser:', error);
@@ -186,8 +176,8 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
         }
       }
 
-      // Convert to WAV using library
-      const wav = toWav(audioBuffer);
+      // Convert AudioBuffer to WAV using Web Audio API
+      const wav = audioBufferToWav(audioBuffer);
       const blob = new Blob([wav], { type: 'audio/wav' });
       const url = URL.createObjectURL(blob);
       
@@ -217,10 +207,23 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
       
       recordingsContainer.appendChild(recordingDiv);
 
-      statusLabel.textContent = 'Recording saved!';
+      const frameCount = denoisedFrames.length;
+      const duration = (totalLength / ctx.sampleRate).toFixed(2);
+      
+      statusLabel.textContent = `Recording saved! (${frameCount} frames, ${duration}s)`;
       statusLabel.className = 'denoiser-status ready';
 
+      // Clear frames after processing
+      denoisedFrames.length = 0;
+      
       await ctx.close();
+      
+      console.log('Recording processed and displayed:', {
+        frames: frameCount,
+        totalLength,
+        duration: duration + 's',
+        containerVisible: recordingsContainer.offsetParent !== null
+      });
     } catch (error) {
       console.error('Error processing recording:', error);
       statusLabel.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
@@ -297,3 +300,50 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   };
 }
 
+// Convert AudioBuffer to WAV format using Web Audio API
+function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
+  const length = buffer.length;
+  const numberOfChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const bytesPerSample = 2; // 16-bit
+  const blockAlign = numberOfChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = length * blockAlign;
+  const bufferSize = 44 + dataSize;
+  
+  const arrayBuffer = new ArrayBuffer(bufferSize);
+  const view = new DataView(arrayBuffer);
+  
+  // WAV header
+  const writeString = (offset: number, string: string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+  
+  writeString(0, 'RIFF');
+  view.setUint32(4, bufferSize - 8, true); // File size - 8
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true); // fmt chunk size
+  view.setUint16(20, 1, true); // Audio format (PCM)
+  view.setUint16(22, numberOfChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true); // Bits per sample
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+  
+  // Convert float samples to 16-bit PCM
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    for (let channel = 0; channel < numberOfChannels; channel++) {
+      const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+  
+  return arrayBuffer;
+}

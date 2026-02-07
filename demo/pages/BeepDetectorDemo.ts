@@ -16,13 +16,19 @@ export function createBeepDetectorDemo(container: HTMLElement): () => void {
 
   // Create audio input
   audioInput = new AudioInput(sampleRate);
+  audioInput.setTargetFrameSize(2048); // Set to match beep detector's FFT size
   new AudioInputUI(container, audioInput);
 
-  // Create beep detector
+  // Create beep detector with frequency ranges
   beepDetector = new VoicemailBeepDetector({ 
     sampleRate, 
     fftSize: 2048,
-    beepFrequencies: [440, 1000, 1500, 2000]
+    frequencyRanges: [
+      { min: 400, max: 500, name: 'Low beep (400-500 Hz)' },
+      { min: 900, max: 1100, name: 'Mid beep (900-1100 Hz)' },
+      { min: 1400, max: 1600, name: 'High beep (1400-1600 Hz)' },
+      { min: 1900, max: 2100, name: 'Very high beep (1900-2100 Hz)' }
+    ]
   });
 
   // Create stats container

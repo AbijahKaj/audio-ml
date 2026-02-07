@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "audio-ml": "file:..",
-    "audiobuffer-to-wav": "^1.0.0",
     "fft.js": "^4.0.4"
   }
 }
