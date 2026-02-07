@@ -1,4 +1,4 @@
-import { Router, DemoPage } from './router';
+import { Router, type DemoPage } from './router';
 import { createAnalyzersDemo } from './pages/AnalyzersDemo';
 import { createVADDemo } from './pages/VADDemo';
 import { createAudioDenoiserDemo } from './pages/AudioDenoiserDemo';

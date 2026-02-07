@@ -18,8 +18,13 @@ export function createVADDemo(container: HTMLElement): () => void {
   audioInput = new AudioInput(sampleRate, 1024);
   new AudioInputUI(container, audioInput);
 
-  // Create VAD
-  vad = new VAD({ sampleRate, fftSize: 1024 });
+  // Create VAD with more sensitive speech-end detection
+  vad = new VAD({ 
+    sampleRate, 
+    fftSize: 1024,
+    silenceFramesRequired: 3, // Reduced from default 5 for faster speech-end detection
+    speechFramesRequired: 2    // Reduced from default 3 for faster speech-start detection
+  });
 
   // Create status display
   statusContainer = document.createElement('div');
@@ -83,10 +88,20 @@ export function createVADDemo(container: HTMLElement): () => void {
       currentStatus.className = 'vad-current-status silence';
     }
     
-    confidenceLabel.textContent = `Confidence: ${Math.round(result.confidence * 100)}%`;
+    confidenceLabel.textContent = `Confidence: ${Math.round(result.confidence * 100)}% | RMSE: ${result.features.rmse.toFixed(4)} | ZCR: ${result.features.zcr.toFixed(4)}`;
   };
 
   audioInput.on('pcm-data', pcmHandler);
+  
+  // Start VAD when audio input starts
+  audioInput.on('start', () => {
+    vad?.start();
+  });
+  
+  // Reset VAD when audio input stops
+  audioInput.on('stop', () => {
+    vad?.reset();
+  });
 
   // VAD event handlers
   vad.on('speech-start', (data) => {

@@ -82,13 +82,15 @@ export class VAD extends BaseApplication {
     const hasCentroid = centroid > this.minCentroid; // Speech has higher frequency content
 
     // Combine features with weighted decision
-    const energyScore = hasEnergy ? 1 : 0;
-    const zcrScore = hasLowZCR ? 0.8 : 0;
-    const flatnessScore = hasLowFlatness ? 0.7 : 0;
-    const centroidScore = hasCentroid ? 0.5 : 0;
+    // Require multiple indicators for speech, not just energy
+    const energyScore = hasEnergy ? 0.4 : 0; // Reduced weight - energy alone shouldn't determine speech
+    const zcrScore = hasLowZCR ? 0.3 : 0;
+    const flatnessScore = hasLowFlatness ? 0.2 : 0;
+    const centroidScore = hasCentroid ? 0.1 : 0;
 
     const confidence = Math.min(1.0, energyScore + zcrScore + flatnessScore + centroidScore);
-    const isSpeechFrame = confidence > 0.5;
+    // Require at least 2 indicators (energy + one other) for speech
+    const isSpeechFrame = confidence >= 0.5 && (hasEnergy && (hasLowZCR || hasLowFlatness || hasCentroid));
 
     // Update state with temporal smoothing
     if (isSpeechFrame) {

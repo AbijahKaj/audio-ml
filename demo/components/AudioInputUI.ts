@@ -3,16 +3,16 @@
  * Provides UI for microphone recording and file upload
  */
 
-import { AudioInput, AudioInputMode } from './AudioInput';
+import { AudioInput, type AudioInputMode } from './AudioInput';
 
 export class AudioInputUI {
-  private container: HTMLDivElement;
+  private container!: HTMLDivElement;
   private audioInput: AudioInput;
-  private modeSelector: HTMLDivElement;
-  private microphoneButton: HTMLButtonElement;
-  private fileInput: HTMLInputElement;
-  private fileButton: HTMLButtonElement;
-  private statusLabel: HTMLDivElement;
+  private modeSelector!: HTMLDivElement;
+  private microphoneButton!: HTMLButtonElement;
+  private fileInput!: HTMLInputElement;
+  private fileButton!: HTMLButtonElement;
+  private statusLabel!: HTMLDivElement;
   private currentMode: AudioInputMode = 'microphone';
 
   constructor(container: HTMLElement, audioInput: AudioInput) {
