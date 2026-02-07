@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write  # Required for OIDC trusted publishing
     
     steps:
       - name: Checkout code
@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+          # OIDC trusted publishing: No token needed if configured on npmjs.com
+          # Fallback to token if OIDC not configured (uncomment line below):
+          # NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install dependencies
         run: npm ci
@@ -30,5 +33,8 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --access public
+        # OIDC trusted publishing is used automatically if configured on npmjs.com
+        # No NODE_AUTH_TOKEN needed when using OIDC
+        # If using token-based auth instead, uncomment the lines below:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
