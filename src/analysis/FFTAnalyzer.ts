@@ -13,11 +13,9 @@ export interface FFTConfig {
 export class FFTAnalyzer {
   private fft: FFT;
   private fftSize: number;
-  private sampleRate: number;
 
   constructor(config: FFTConfig) {
     this.fftSize = config.fftSize || 1024;
-    this.sampleRate = config.sampleRate;
     this.fft = new FFT(this.fftSize);
   }
 

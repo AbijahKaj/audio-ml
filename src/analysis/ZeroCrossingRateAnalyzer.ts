@@ -7,9 +7,9 @@ export interface ZeroCrossingRateConfig { sampleRate: number }
 
 export class ZeroCrossingRateAnalyzer {
   /**
-   * @param config - Configuration with sample rate
+   * @param _config - Configuration with sample rate
    */
-  constructor(config: ZeroCrossingRateConfig) {
+  constructor(_config: ZeroCrossingRateConfig) {
   }
   /**
    * Compute the zero crossing rate for a PCM frame.

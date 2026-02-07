@@ -1,0 +1,36 @@
+# Source files (only dist should be published)
+src/
+*.ts
+!*.d.ts
+
+# Development files
+.vite/
+node_modules/
+*.log
+.DS_Store
+
+# Build configs
+tsconfig.json
+tsconfig.build.json
+vite.config.*
+index.html
+
+# Examples and demos
+examples/
+*.example.*
+*.test.*
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+*.test.ts
+*.spec.ts

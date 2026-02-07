@@ -1,12 +1,48 @@
 {
   "name": "audio-ml",
-  "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "A comprehensive JavaScript/TypeScript library for audio feature extraction, designed for machine learning applications and voice AI systems",
   "type": "module",
+  "main": "./dist/analysis/index.js",
+  "types": "./dist/analysis/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/analysis/index.js",
+      "types": "./dist/analysis/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc -p tsconfig.build.json",
+    "build:app": "tsc && vite build",
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "audio",
+    "audio-analysis",
+    "feature-extraction",
+    "mfcc",
+    "fft",
+    "spectral-analysis",
+    "voice-ai",
+    "speech-recognition",
+    "machine-learning",
+    "signal-processing",
+    "dsp",
+    "typescript"
+  ],
+  "author": "Abijah Kajabika",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AbijahKaj/audio-ml.git"
   },
   "devDependencies": {
     "typescript": "~5.9.3",
@@ -14,5 +50,8 @@
   },
   "dependencies": {
     "fft.js": "^4.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

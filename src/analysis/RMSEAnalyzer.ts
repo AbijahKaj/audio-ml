@@ -7,9 +7,9 @@ export interface RMSEConfig { sampleRate: number }
 
 export class RMSEAnalyzer {
   /**
-   * @param config - Configuration with sample rate
+   * @param _config - Configuration with sample rate
    */
-  constructor(config: RMSEConfig) {
+  constructor(_config: RMSEConfig) {
   }
   /**
    * Compute the root mean square energy for a PCM frame.
