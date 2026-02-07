@@ -11,9 +11,9 @@ node_modules/
 
 # Build configs
 tsconfig.json
-tsconfig.build.json
 vite.config.*
 index.html
+demo/
 
 # Examples and demos
 examples/
