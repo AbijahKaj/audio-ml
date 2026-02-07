@@ -153,3 +153,286 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* VAD Demo Styles */
+.vad-status-container {
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  max-width: 600px;
+}
+
+.vad-status-title {
+  color: #fff;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.vad-current-status {
+  font-size: 1.5rem;
+  font-weight: bold;
+  padding: 1rem;
+  text-align: center;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  background-color: #2a2a2a;
+}
+
+.vad-current-status.waiting {
+  color: #888;
+}
+
+.vad-current-status.speech {
+  color: #00ff88;
+  background-color: #1a3a2a;
+}
+
+.vad-current-status.silence {
+  color: #888;
+  background-color: #2a2a2a;
+}
+
+.vad-confidence {
+  color: #888;
+  margin-bottom: 1rem;
+}
+
+.vad-log-container {
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  max-width: 600px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.vad-log-title {
+  color: #fff;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.vad-log-content {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.vad-log-entry {
+  padding: 0.5rem;
+  margin-bottom: 0.25rem;
+  padding-left: 0.75rem;
+}
+
+.vad-log-entry.info {
+  border-left: 3px solid #888;
+}
+
+.vad-log-entry.speech {
+  border-left: 3px solid #00ff88;
+}
+
+.vad-log-entry.silence {
+  border-left: 3px solid #ff4444;
+}
+
+/* Audio Denoiser Demo Styles */
+.denoiser-controls-container {
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.denoiser-title {
+  color: #fff;
+  margin: 0;
+}
+
+.denoiser-record-button {
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+}
+
+.denoiser-status {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.denoiser-status.ready {
+  color: #00ff88;
+}
+
+.denoiser-status.recording {
+  color: #ff8800;
+}
+
+.denoiser-status.error {
+  color: #ff4444;
+}
+
+.denoiser-snr {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.denoiser-recordings-container {
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  max-width: 600px;
+}
+
+.denoiser-recordings-title {
+  color: #fff;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.denoiser-recording-entry {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  border: 1px solid #333;
+}
+
+.denoiser-recording-info {
+  color: #888;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.denoiser-recording-audio {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.denoiser-download-link {
+  display: inline-block;
+  color: #00ff88;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+  text-decoration: none;
+  border: 1px solid #00ff88;
+  transition: background-color 0.2s;
+}
+
+.denoiser-download-link:hover {
+  background-color: #3a3a3a;
+}
+
+/* Beep Detector Demo Styles */
+.beep-stats-container {
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  max-width: 600px;
+}
+
+.beep-stats-title {
+  color: #fff;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.beep-count {
+  color: #00ff88;
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.beep-tone-count {
+  color: #888;
+  font-size: 1rem;
+}
+
+.beep-log-container {
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  max-width: 600px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.beep-log-title {
+  color: #fff;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.beep-log-content {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.beep-log-entry {
+  padding: 0.5rem;
+  margin-bottom: 0.25rem;
+  padding-left: 0.75rem;
+}
+
+.beep-log-entry.info {
+  border-left: 3px solid #888;
+}
+
+.beep-log-entry.beep {
+  border-left: 3px solid #00ff88;
+}
+
+.beep-log-entry.tone {
+  border-left: 3px solid #ff8800;
+}
+
+/* Navigation Styles */
+.demo-nav {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.demo-nav-title {
+  color: #fff;
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+  text-align: center;
+}
+
+.demo-nav-buttons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.demo-nav-button {
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
+}
+
+.demo-nav-button.active {
+  background-color: #646cff;
+  color: #fff;
+}
