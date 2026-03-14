@@ -8,7 +8,7 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
-    "rootDir": ".."
+    "rootDir": "."
   },
   "include": [
     "**/*.ts"
