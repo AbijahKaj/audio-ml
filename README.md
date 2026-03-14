@@ -1,8 +1,8 @@
 # Audio ML - Audio Analysis for Machine Learning
 
-A comprehensive JavaScript/TypeScript library for real-time audio feature extraction, designed for machine learning applications, particularly voice AI systems.
+A JavaScript/TypeScript library for real-time audio feature extraction and processing. Works in both browsers and Node.js.
 
-## 📦 Installation
+## Installation
 
 ```bash
 npm install audio-ml
@@ -12,247 +12,130 @@ yarn add audio-ml
 pnpm add audio-ml
 ```
 
-**Works in both Web and Node.js environments!** This package is designed to be universal - use it in your browser-based applications or in Node.js server-side applications.
-
-## 🎬 Demo
+## Demo
 
 https://github.com/user-attachments/assets/aae5ff8c-120b-4c6c-a4d4-7348dacc3ca0
 
+## Analyzers
 
-## Overview
-
-This project provides a complete toolkit for analyzing audio signals in real-time, extracting various features that are essential for machine learning models in speech recognition, speaker identification, music information retrieval, and voice AI applications.
-
-## Features
-
-### 🎯 Real-Time Audio Analysis
-- Process audio from microphone or audio playback in real-time
-- Extract multiple audio features simultaneously
-- Visualize all features in a responsive grid layout
-
-### 📊 16 Audio Analyzers
-
-#### Frequency Domain Features
-- **FFT** - Fast Fourier Transform magnitude spectrum
-- **MFCC** - Mel-Frequency Cepstral Coefficients (13 coefficients)
-- **PLP** - Perceptual Linear Prediction
-- **Mel Spectrogram** - Mel-scaled power spectrum
-- **Constant-Q Transform** - Logarithmically spaced frequency analysis
-- **Chroma Features** - 12-tone pitch class representation
-
-#### Spectral Features
-- **Spectral Centroid** - Frequency "center of mass"
-- **Spectral Rolloff** - Frequency below which 85% of energy lies
-- **Spectral Bandwidth** - Spread of spectrum around centroid
-- **Spectral Flatness** - Measure of noise-like vs tone-like content
-
-#### Time Domain Features
-- **Zero Crossing Rate** - Rate of sign changes
-- **RMSE** - Root Mean Square Energy
-- **Waveform Envelope** - Amplitude envelope tracking
-- **Autocorrelation** - Periodicity and pitch detection
-
-#### Advanced Features
-- **LPC** - Linear Predictive Coding coefficients
-- **Wavelet Transform** - Multi-level time-frequency decomposition
-
-### 🎨 Interactive Visualizations
-- Real-time canvas-based visualizations for each analyzer
-- Responsive grid layout (up to 4 columns)
-- Info tooltips with detailed explanations and resources
-- Scrolling spectrograms for time-frequency analysis
-
-## Getting Started
-
-### Using the Package
-
-The `audio-ml` package can be used in both **web browsers** and **Node.js** environments:
-
-#### Web Browser Usage
+16 low-level audio analyzers, all sharing the same interface: `analyzer.analyzeFrame(pcm: Float32Array)`.
 
 ```typescript
 import { FFTAnalyzer, MFCCAnalyzer } from 'audio-ml';
 
-// Create analyzers
-const fftAnalyzer = new FFTAnalyzer({ 
-  sampleRate: 44100, 
-  fftSize: 1024 
-});
+const fft = new FFTAnalyzer({ sampleRate: 44100, fftSize: 1024 });
+const mfcc = new MFCCAnalyzer({ sampleRate: 44100 });
 
-// Use with Web Audio API
-const audioContext = new AudioContext();
-const processor = audioContext.createScriptProcessor(1024, 1, 1);
-
-processor.onaudioprocess = (event) => {
-  const pcm = event.inputBuffer.getChannelData(0);
-  const spectrum = fftAnalyzer.analyzeFrame(pcm);
-  // Process your features...
-};
+const spectrum = fft.analyzeFrame(pcmFrame);    // Float32Array
+const features = mfcc.analyzeFrame(pcmFrame);   // number[]
 ```
 
-#### Node.js Usage
+| Analyzer | Output | Description |
+|----------|--------|-------------|
+| FFT | `Float32Array` | Magnitude spectrum |
+| MFCC | `number[]` | 13 mel-frequency cepstral coefficients |
+| PLP | `number[]` | Perceptual linear prediction |
+| Mel Spectrogram | `number[]` | Mel-scaled power spectrum |
+| Constant-Q Transform | `Float32Array` | Log-spaced frequency analysis |
+| Chroma Features | `number[]` | 12-tone pitch class distribution |
+| Spectral Centroid | `number` | Frequency center of mass (Hz) |
+| Spectral Rolloff | `number` | 85th-percentile frequency (Hz) |
+| Spectral Bandwidth | `number` | Spectral spread around centroid (Hz) |
+| Spectral Flatness | `number` | Noise-like vs tonal content (0–1) |
+| Zero Crossing Rate | `number` | Rate of sign changes |
+| RMSE | `number` | Root mean square energy |
+| Waveform Envelope | `Float32Array` | Amplitude envelope |
+| Autocorrelation | `Float32Array` | Periodicity / pitch detection |
+| LPC | `number[]` | Linear predictive coding coefficients |
+| Wavelet Transform | `Float32Array[]` | Multi-level time-frequency decomposition |
+
+## Applications
+
+Higher-level tools built on top of the analyzers. Import from `audio-ml/applications`. All applications extend `BaseApplication` with an event-driven API: call `processFrame()` per audio frame, listen for events.
 
 ```typescript
-import { FFTAnalyzer, MFCCAnalyzer } from 'audio-ml';
-import { readFileSync } from 'fs';
-import { decode } from 'audio-decode'; // or similar audio decoder
-
-// Load and decode audio file
-const audioBuffer = await decode(readFileSync('audio.wav'));
-
-// Create analyzer
-const mfccAnalyzer = new MFCCAnalyzer({ 
-  sampleRate: audioBuffer.sampleRate 
-});
-
-// Process audio frames
-const frameSize = 1024;
-for (let i = 0; i < audioBuffer.length; i += frameSize) {
-  const frame = audioBuffer.getChannelData(0).subarray(i, i + frameSize);
-  const features = mfccAnalyzer.analyzeFrame(frame);
-  // Use features for ML models...
-}
+import { VAD, AudioDenoiser, VoicemailBeepDetector } from 'audio-ml/applications';
 ```
 
-### Development
+### Voice Activity Detection (VAD)
 
-```bash
-npm run dev
-# or
-yarn dev
-```
-
-Open your browser and navigate to the local development server (typically `http://localhost:5173`).
-
-### Usage
-
-1. Click "Start Recording" to begin capturing audio from your microphone
-2. All 16 analyzers will update in real-time as you speak
-3. Click the ⓘ icon next to any analyzer name to learn more about it
-4. Click "Stop Recording" to end the session
-
-## Architecture
-
-### Analyzers (`src/analysis/`)
-Each analyzer is a self-contained class that:
-- Takes PCM audio frames as input
-- Returns feature vectors or scalar values
-- Handles its own FFT and signal processing
-
-### Visualizations (`src/visualizations/`)
-- **Base classes**: `BaseVisualizer`, `ArrayVisualizer`, `ScalarVisualizer`
-- **Visualizer functions**: Specific drawing functions for each analyzer type
-- **VisualizationManager**: Manages multiple visualizations and updates them in real-time
-- **Info system**: Tooltips with detailed information about each analyzer
-
-### Main Application (`src/main.ts`)
-- Sets up audio capture from microphone
-- Creates and manages all analyzers
-- Handles frame size differences between analyzers
-- Updates visualizations in real-time
-
-## API Reference
-
-### Basic Usage
+Detects speech vs silence by combining RMSE, Zero Crossing Rate, Spectral Flatness, and Spectral Centroid with weighted scoring and temporal smoothing.
 
 ```typescript
-import { FFTAnalyzer, MFCCAnalyzer } from 'audio-ml';
+const vad = new VAD({ sampleRate: 44100 });
 
-// Create analyzers
-const fftAnalyzer = new FFTAnalyzer({ 
-  sampleRate: 44100, 
-  fftSize: 1024 
-});
+vad.on('speech-start', ({ confidence }) => console.log('Speaking', confidence));
+vad.on('speech-end', ({ confidence }) => console.log('Silent', confidence));
 
-const mfccAnalyzer = new MFCCAnalyzer({ 
-  sampleRate: 44100 
-});
-
-// Analyze a frame
-const pcmFrame = new Float32Array(1024); // Your audio data
-const spectrum = fftAnalyzer.analyzeFrame(pcmFrame);
-const mfccFeatures = mfccAnalyzer.analyzeFrame(pcmFrame);
-
-// Use the features for your ML model or further processing
-console.log('FFT Spectrum:', spectrum);
-console.log('MFCC Features:', mfccFeatures);
+// Per frame
+const result = vad.processFrame(pcm); // { isSpeech, confidence, features }
 ```
 
-## Analyzers Reference
+### Audio Denoiser
 
-| Analyzer | Output Type | Frame Size | Description |
-|----------|-------------|------------|-------------|
-| FFT | `Float32Array` | 1024 | Raw frequency spectrum |
-| MFCC | `number[]` | 1024 | 13 cepstral coefficients |
-| PLP | `number[]` | 512 | Perceptual linear prediction |
-| Chroma | `number[]` | 1024 | 12 pitch classes |
-| LPC | `number[]` | Any | Linear prediction coefficients |
-| CQT | `Float32Array` | 2048 | Constant-Q transform |
-| Wavelet | `Float32Array[]` | Any | Multi-level decomposition |
-| Envelope | `Float32Array` | Any | Amplitude envelope |
-| Autocorr | `Float32Array` | Any | Autocorrelation function |
-| Centroid | `number` | 1024 | Spectral centroid (Hz) |
-| Rolloff | `number` | 1024 | Spectral rolloff (Hz) |
-| Bandwidth | `number` | 1024 | Spectral bandwidth (Hz) |
-| Flatness | `number` | 1024 | Spectral flatness (0-1) |
-| ZCR | `number` | Any | Zero crossing rate |
-| RMSE | `number` | Any | Root mean square energy |
-| Mel Spectrogram | `number[]` | 1024 | Mel-scaled energies |
+Removes background noise via spectral subtraction. Automatically estimates the noise profile from initial silence using RMSE and Spectral Flatness, then subtracts it in the frequency domain.
+
+```typescript
+const denoiser = new AudioDenoiser({ sampleRate: 44100, fftSize: 2048 });
+
+denoiser.on('noise-estimated', () => console.log('Noise profile ready'));
+denoiser.on('denoised-frame', ({ audio, snr }) => { /* clean audio */ });
+
+const { audio, snr, noiseReduction } = denoiser.processFrame(pcm);
+```
+
+### Voicemail Beep Detector
+
+Detects tonal beeps using FFT peak detection across configurable frequency ranges, with sustained-tone tracking and duration filtering.
+
+```typescript
+const detector = new VoicemailBeepDetector({
+  sampleRate: 44100,
+  fftSize: 2048,
+  frequencyRanges: [
+    { min: 400, max: 500, name: 'Low beep' },
+    { min: 900, max: 1100, name: 'Mid beep' },
+  ]
+});
+
+detector.on('beep-detected', ({ frequency, duration, confidence }) => {
+  console.log(`Beep at ${frequency} Hz`);
+});
+
+detector.processFrame(pcm);
+```
 
 ## Use Cases
 
-### Voice AI Applications
-- **Speech Recognition**: MFCC, PLP, and spectral features for acoustic modeling
-- **Speaker Identification**: Voiceprint extraction using MFCC, LPC, and spectral features
-- **Voice Activity Detection**: ZCR, RMSE, and spectral flatness for silence detection
-- **Emotion Recognition**: Spectral features and prosodic features
-
-### Music Information Retrieval
-- **Chord Recognition**: Chroma features
-- **Key Detection**: Chroma features and spectral analysis
-- **Tempo Estimation**: Autocorrelation
-- **Genre Classification**: Multiple spectral and temporal features
-
-### Audio Processing
-- **Noise Reduction**: Spectral analysis and filtering
-- **Pitch Detection**: Autocorrelation and CQT
-- **Onset Detection**: Envelope and spectral features
-
-## Dependencies
-
-- **fft.js** - Fast Fourier Transform implementation
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Build tool and dev server
+- **Speech recognition**: MFCC and PLP for acoustic modeling, Spectral features for phone classification
+- **Speaker identification**: Voiceprint extraction via MFCC, LPC, and Spectral Centroid/Bandwidth
+- **Voice activity detection**: VAD application, or build your own with RMSE, ZCR, and Spectral Flatness
+- **Noise reduction**: AudioDenoiser application for real-time spectral subtraction
+- **Telephony**: VoicemailBeepDetector for detecting end-of-greeting tones in voicemail systems
+- **Music analysis**: Chroma Features for chord/key detection, Autocorrelation for tempo, CQT for pitch tracking
+- **Genre / mood classification**: Combine MFCC, Spectral Rolloff, Bandwidth, and Flatness as ML feature vectors
+- **Onset detection**: Waveform Envelope and Spectral Flatness for detecting note/event boundaries
 
 ## Platform Support
 
-### Web Browser
-- Modern browsers with Web Audio API support
-- Microphone access required for real-time analysis
-- Canvas API for visualizations
-- Works with ES modules and bundlers (Vite, Webpack, Rollup, etc.)
+- **Browser**: Modern browsers with Web Audio API. Works with Vite, Webpack, Rollup, etc.
+- **Node.js**: 18.0.0+. Pair with audio decoding libraries (node-wav, audio-decode) for file processing.
 
-### Node.js
-- Node.js 18.0.0 or higher
-- Works with CommonJS and ES modules
-- Compatible with audio decoding libraries (node-wav, audio-decode, etc.)
-- Perfect for server-side audio processing and ML pipelines
+## Development
+
+```bash
+# Run the interactive demo
+cd demo && yarn install && yarn dev
+```
+
+The demo includes live visualizations of all 16 analyzers plus interactive pages for each application.
 
 ## Contributing
 
-This project is designed to be extensible. To add a new analyzer:
+To add a new analyzer, create a class in `src/analysis/` implementing `analyzeFrame(pcm: Float32Array)` and export it from `src/analysis/index.ts`.
 
-1. Create a new analyzer class in `src/analysis/`
-2. Implement the `analyzeFrame(pcm: Float32Array)` method
-3. Add a visualization function in `src/visualizations/analyzerVisualizers.ts`
-4. Register it in `VisualizationManager.getVisualizer()`
-5. Add info to `src/visualizations/analyzerInfo.ts`
+To add a new application, extend `BaseApplication` in `src/applications/`, implement `processFrame()`, and export from `src/applications/index.ts`.
 
 ## License
 
 MIT - See [LICENSE](LICENSE) file for details
-
-## Resources
-
-- [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
-- [FFT.js Documentation](https://github.com/indutny/fft.js)
