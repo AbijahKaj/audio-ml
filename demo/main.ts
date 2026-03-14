@@ -11,7 +11,7 @@ const pages: { page: DemoPage; label: string }[] = [
   { page: 'analyzers', label: 'All Analyzers' },
   { page: 'vad', label: 'VAD' },
   { page: 'denoiser', label: 'Denoiser' },
-  { page: 'beep-detector', label: 'Beep Detector' },
+  { page: 'beep-detector', label: 'Voicemail Beep Detector' },
 ];
 
 // Wait for DOM to be ready

@@ -37,7 +37,7 @@ export function createBeepDetectorDemo(container: HTMLElement): () => void {
   container.appendChild(statsContainer);
 
   const statsTitle = document.createElement('h2');
-  statsTitle.textContent = 'Beep Detection';
+  statsTitle.textContent = 'Voicemail Beep Detection';
   statsTitle.className = 'beep-stats-title';
   statsContainer.appendChild(statsTitle);
 
