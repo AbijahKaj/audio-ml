@@ -31,13 +31,62 @@ export function createBeepDetectorDemo(container: HTMLElement): () => void {
     ]
   });
 
+  // Create explainer section
+  const explainer = document.createElement('div');
+  explainer.className = 'app-explainer';
+  explainer.innerHTML = `
+    <h2 class="app-explainer-title">Voicemail Beep Detector</h2>
+    <p class="app-explainer-description">
+      Detects short tonal beeps commonly found in voicemail systems using FFT-based peak detection.
+      The detector scans configurable frequency ranges each frame and tracks sustained tones over time.
+    </p>
+    <div class="app-explainer-phases">
+      <div class="app-explainer-phase">
+        <h4>Step 1 &mdash; Frequency Analysis</h4>
+        <p>
+          Each audio frame is passed to <code>FFTAnalyzer</code>, which computes the magnitude spectrum.
+          The detector then scans predefined frequency bands (400&ndash;500 Hz, 900&ndash;1100 Hz,
+          1400&ndash;1600 Hz, 1900&ndash;2100 Hz) looking for prominent spectral peaks.
+        </p>
+      </div>
+      <div class="app-explainer-phase">
+        <h4>Step 2 &mdash; Peak Validation</h4>
+        <p>
+          A peak must pass two tests: <strong>prominence</strong> (at least 2&times; the average
+          magnitude in its range) and <strong>relative energy</strong> (significant fraction of total
+          spectral energy). This filters out broadband noise that might have incidental energy in a range.
+        </p>
+      </div>
+      <div class="app-explainer-phase">
+        <h4>Step 3 &mdash; Tone Tracking</h4>
+        <p>
+          When a valid peak is found across consecutive frames, the detector tracks it as a
+          sustained tone. If the tone lasts between 0.1s and 2.0s and then stops, it is classified
+          as a beep. Longer tones are reported as <em>tone-end</em> events; shorter ones are ignored.
+        </p>
+      </div>
+    </div>
+    <div class="app-explainer-analyzers">
+      <div class="app-explainer-analyzer">
+        <span class="app-explainer-analyzer-name">FFTAnalyzer</span>
+        <span class="app-explainer-analyzer-role">Computes magnitude spectrum &mdash; converts each frame to frequency-domain representation</span>
+      </div>
+    </div>
+    <p class="app-explainer-detail">
+      The frequency ranges are tuned for common voicemail beep frequencies. The detector also
+      handles frequency drift (up to 100 Hz) between consecutive frames, allowing it to track
+      tones that shift slightly over time.
+    </p>
+  `;
+  container.appendChild(explainer);
+
   // Create stats container
   statsContainer = document.createElement('div');
   statsContainer.className = 'beep-stats-container';
   container.appendChild(statsContainer);
 
   const statsTitle = document.createElement('h2');
-  statsTitle.textContent = 'Beep Detection Statistics';
+  statsTitle.textContent = 'Live Detection';
   statsTitle.className = 'beep-stats-title';
   statsContainer.appendChild(statsTitle);
 

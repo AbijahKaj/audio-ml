@@ -404,6 +404,126 @@ button:focus-visible {
   border-left: 3px solid #ff8800;
 }
 
+/* Application Explainer Styles */
+.app-explainer {
+  margin: 2rem auto;
+  padding: 1.5rem 2rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  border-left: 4px solid #646cff;
+  max-width: 600px;
+  text-align: left;
+}
+
+.app-explainer-title {
+  color: #fff;
+  margin: 0 0 0.75rem 0;
+  font-size: 1.4rem;
+}
+
+.app-explainer-description {
+  color: #bbb;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0 0 1rem 0;
+}
+
+.app-explainer-description code {
+  color: #646cff;
+  background-color: #2a2a3a;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+
+.app-explainer-analyzers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.app-explainer-analyzer {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 0.5rem 0.75rem;
+  align-items: baseline;
+  padding: 0.6rem 0.75rem;
+  background-color: #222;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+
+.app-explainer-analyzer-name {
+  color: #646cff;
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-explainer-analyzer-weight {
+  color: #00ff88;
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: rgba(0, 255, 136, 0.1);
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.app-explainer-analyzer-role {
+  color: #999;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.app-explainer-phases {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.app-explainer-phase {
+  padding: 0.75rem 1rem;
+  background-color: #222;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+
+.app-explainer-phase h4 {
+  color: #fff;
+  margin: 0 0 0.4rem 0;
+  font-size: 0.9rem;
+}
+
+.app-explainer-phase p {
+  color: #999;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.app-explainer-phase code {
+  color: #646cff;
+  background-color: #2a2a3a;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+
+.app-explainer-detail {
+  color: #888;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0.75rem 0 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid #333;
+}
+
 /* Navigation Styles */
 .demo-nav {
   margin-bottom: 2rem;

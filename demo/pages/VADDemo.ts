@@ -26,6 +26,44 @@ export function createVADDemo(container: HTMLElement): () => void {
     speechFramesRequired: 2    // Reduced from default 3 for faster speech-start detection
   });
 
+  // Create explainer section
+  const explainer = document.createElement('div');
+  explainer.className = 'app-explainer';
+  explainer.innerHTML = `
+    <h2 class="app-explainer-title">Voice Activity Detection</h2>
+    <p class="app-explainer-description">
+      Determines in real-time whether the incoming audio contains speech or silence/noise.
+      The VAD combines four low-level analyzers from the <code>audio-ml</code> library, each contributing a weighted score:
+    </p>
+    <div class="app-explainer-analyzers">
+      <div class="app-explainer-analyzer">
+        <span class="app-explainer-analyzer-name">RMSEAnalyzer</span>
+        <span class="app-explainer-analyzer-weight">40%</span>
+        <span class="app-explainer-analyzer-role">Measures signal energy &mdash; speech is louder than background noise</span>
+      </div>
+      <div class="app-explainer-analyzer">
+        <span class="app-explainer-analyzer-name">ZeroCrossingRateAnalyzer</span>
+        <span class="app-explainer-analyzer-weight">30%</span>
+        <span class="app-explainer-analyzer-role">Counts sign changes per frame &mdash; voiced speech has a lower rate than noise</span>
+      </div>
+      <div class="app-explainer-analyzer">
+        <span class="app-explainer-analyzer-name">SpectralFlatnessAnalyzer</span>
+        <span class="app-explainer-analyzer-weight">20%</span>
+        <span class="app-explainer-analyzer-role">Ratio of geometric to arithmetic mean of the spectrum &mdash; noise is flat, speech has peaks</span>
+      </div>
+      <div class="app-explainer-analyzer">
+        <span class="app-explainer-analyzer-name">SpectralCentroidAnalyzer</span>
+        <span class="app-explainer-analyzer-weight">10%</span>
+        <span class="app-explainer-analyzer-role">Weighted average frequency &mdash; speech energy concentrates above ~500 Hz</span>
+      </div>
+    </div>
+    <p class="app-explainer-detail">
+      A frame is classified as speech when the combined confidence &ge; 50% <em>and</em> energy plus at least one other indicator are active.
+      Temporal smoothing prevents flickering: speech requires ${2} consecutive frames to trigger, silence requires ${3}.
+    </p>
+  `;
+  container.appendChild(explainer);
+
   // Create status display
   statusContainer = document.createElement('div');
   statusContainer.id = 'vad-status';
@@ -33,7 +71,7 @@ export function createVADDemo(container: HTMLElement): () => void {
   container.appendChild(statusContainer);
 
   const statusTitle = document.createElement('h2');
-  statusTitle.textContent = 'Voice Activity Detection';
+  statusTitle.textContent = 'Live Detection';
   statusTitle.className = 'vad-status-title';
   statusContainer.appendChild(statusTitle);
 
