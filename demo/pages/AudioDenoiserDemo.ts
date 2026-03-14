@@ -28,65 +28,13 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
     noiseEstimationThreshold: 0.02 // Slightly higher threshold
   });
 
-  // Create explainer section
-  const explainer = document.createElement('div');
-  explainer.className = 'app-explainer';
-  explainer.innerHTML = `
-    <h2 class="app-explainer-title">Audio Denoiser</h2>
-    <p class="app-explainer-description">
-      Removes background noise from audio in real-time using spectral subtraction.
-      The denoiser works in two phases and combines three components from the <code>audio-ml</code> library:
-    </p>
-    <div class="app-explainer-phases">
-      <div class="app-explainer-phase">
-        <h4>Phase 1 &mdash; Noise Estimation</h4>
-        <p>
-          During initial silence, the denoiser collects frames and builds a noise profile.
-          It uses <code>RMSEAnalyzer</code> to find low-energy frames and
-          <code>SpectralFlatnessAnalyzer</code> to confirm they are noise-like (spectrally flat)
-          rather than quiet speech. Once ${8} qualifying frames are collected, the average
-          magnitude spectrum becomes the noise model.
-        </p>
-      </div>
-      <div class="app-explainer-phase">
-        <h4>Phase 2 &mdash; Spectral Subtraction</h4>
-        <p>
-          Each audio frame is windowed (Hann), transformed with <code>FFT</code> (via <code>fft.js</code>),
-          and the estimated noise spectrum is subtracted from the magnitude.
-          An over-subtraction factor (2&times;) aggressively removes noise, while a spectral floor (2%)
-          prevents over-suppression artifacts. The modified magnitudes are recombined with the
-          original phase and inverse-transformed back to audio.
-        </p>
-      </div>
-    </div>
-    <div class="app-explainer-analyzers">
-      <div class="app-explainer-analyzer">
-        <span class="app-explainer-analyzer-name">FFT (fft.js)</span>
-        <span class="app-explainer-analyzer-role">Forward &amp; inverse transform &mdash; converts between time and frequency domains</span>
-      </div>
-      <div class="app-explainer-analyzer">
-        <span class="app-explainer-analyzer-name">RMSEAnalyzer</span>
-        <span class="app-explainer-analyzer-role">Identifies low-energy frames as noise candidates during estimation</span>
-      </div>
-      <div class="app-explainer-analyzer">
-        <span class="app-explainer-analyzer-name">SpectralFlatnessAnalyzer</span>
-        <span class="app-explainer-analyzer-role">Confirms noise candidates are spectrally flat (not quiet speech)</span>
-      </div>
-    </div>
-    <p class="app-explainer-detail">
-      When adaptive tracking is enabled, the noise model is continuously updated during detected silence
-      using an exponential moving average, allowing the denoiser to adapt to changing noise conditions.
-    </p>
-  `;
-  container.appendChild(explainer);
-
   // Create controls container
   const controlsContainer = document.createElement('div');
   controlsContainer.className = 'denoiser-controls-container';
   container.appendChild(controlsContainer);
 
   const title = document.createElement('h2');
-  title.textContent = 'Live Denoiser';
+  title.textContent = 'Audio Denoiser';
   title.className = 'denoiser-title';
   controlsContainer.appendChild(title);
 
@@ -344,11 +292,64 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
 
   recordButton.disabled = true;
 
+  // Explainer section at bottom
+  const explainer = document.createElement('div');
+  explainer.className = 'app-explainer';
+  explainer.innerHTML = `
+    <h2 class="app-explainer-title">How It Works</h2>
+    <p class="app-explainer-description">
+      Removes background noise from audio in real-time using spectral subtraction.
+      The denoiser works in two phases and combines three components from the <code>audio-ml</code> library:
+    </p>
+    <div class="app-explainer-phases">
+      <div class="app-explainer-phase">
+        <h4>Phase 1 &mdash; Noise Estimation</h4>
+        <p>
+          During initial silence, the denoiser collects frames and builds a noise profile.
+          It uses <code>RMSEAnalyzer</code> to find low-energy frames and
+          <code>SpectralFlatnessAnalyzer</code> to confirm they are noise-like (spectrally flat)
+          rather than quiet speech. Once 8 qualifying frames are collected, the average
+          magnitude spectrum becomes the noise model.
+        </p>
+      </div>
+      <div class="app-explainer-phase">
+        <h4>Phase 2 &mdash; Spectral Subtraction</h4>
+        <p>
+          Each audio frame is windowed (Hann), transformed with <code>FFT</code> (via <code>fft.js</code>),
+          and the estimated noise spectrum is subtracted from the magnitude.
+          An over-subtraction factor (2&times;) aggressively removes noise, while a spectral floor (2%)
+          prevents over-suppression artifacts. The modified magnitudes are recombined with the
+          original phase and inverse-transformed back to audio.
+        </p>
+      </div>
+    </div>
+    <div class="app-explainer-analyzers">
+      <div class="app-explainer-analyzer">
+        <span class="app-explainer-analyzer-name">FFT (fft.js)</span>
+        <span class="app-explainer-analyzer-role">Forward &amp; inverse transform &mdash; converts between time and frequency domains</span>
+      </div>
+      <div class="app-explainer-analyzer">
+        <span class="app-explainer-analyzer-name">RMSEAnalyzer</span>
+        <span class="app-explainer-analyzer-role">Identifies low-energy frames as noise candidates during estimation</span>
+      </div>
+      <div class="app-explainer-analyzer">
+        <span class="app-explainer-analyzer-name">SpectralFlatnessAnalyzer</span>
+        <span class="app-explainer-analyzer-role">Confirms noise candidates are spectrally flat (not quiet speech)</span>
+      </div>
+    </div>
+    <p class="app-explainer-detail">
+      When adaptive tracking is enabled, the noise model is continuously updated during detected silence
+      using an exponential moving average, allowing the denoiser to adapt to changing noise conditions.
+    </p>
+  `;
+  container.appendChild(explainer);
+
   // Cleanup
   return () => {
     audioInput?.off('pcm-data', recordingPcmHandler);
     audioInput?.stop();
     denoiser?.stop();
+    explainer.remove();
   };
 }
 
