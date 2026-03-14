@@ -268,7 +268,7 @@ export function createAudioDenoiserDemo(container: HTMLElement): () => void {
   recordButton.addEventListener('click', async () => {
     if (!isRecording) {
       // Check if noise estimation is complete
-      if (!denoiser || !(denoiser as any).isNoiseEstimationComplete) {
+      if (!denoiser || !denoiser.noiseEstimated) {
         statusLabel.textContent = '⚠️ Noise estimation not complete yet. Wait for "Noise estimated!" message.';
         statusLabel.className = 'denoiser-status error';
         return;

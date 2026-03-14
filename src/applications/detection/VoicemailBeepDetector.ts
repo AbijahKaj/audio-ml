@@ -73,8 +73,15 @@ export class VoicemailBeepDetector extends BaseApplication {
   processFrame(pcm: Float32Array): BeepDetectionResult | null {
     this.frameCount++;
 
+    // Pad or truncate to fftSize so FFTAnalyzer doesn't throw
+    let frame = pcm;
+    if (pcm.length !== this.fftSize) {
+      frame = new Float32Array(this.fftSize);
+      frame.set(pcm.subarray(0, Math.min(pcm.length, this.fftSize)));
+    }
+
     // Get frequency spectrum
-    const spectrum = this.fft.analyzeFrame(pcm);
+    const spectrum = this.fft.analyzeFrame(frame);
     
     // Calculate total energy
     const totalEnergy = Array.from(spectrum).reduce((sum, mag) => sum + mag * mag, 0);
@@ -113,9 +120,9 @@ export class VoicemailBeepDetector extends BaseApplication {
     let peakMagnitude = 0;
 
     for (const range of this.frequencyRanges) {
-      // Convert frequency range to bin indices
-      const minBin = Math.floor((range.min * this.fftSize * 2) / this.sampleRate);
-      const maxBin = Math.ceil((range.max * this.fftSize * 2) / this.sampleRate);
+      // Convert frequency range to bin indices (bin k = k * sampleRate / fftSize)
+      const minBin = Math.floor((range.min * this.fftSize) / this.sampleRate);
+      const maxBin = Math.ceil((range.max * this.fftSize) / this.sampleRate);
       
       // Find peak in this range
       let rangeMaxMagnitude = 0;
@@ -131,8 +138,10 @@ export class VoicemailBeepDetector extends BaseApplication {
         }
       }
       
-      // Calculate average magnitude in range
-      const rangeAvgMagnitude = rangeSum / (maxBin - minBin);
+      const binCount = maxBin - minBin;
+      if (binCount <= 0) continue;
+
+      const rangeAvgMagnitude = rangeSum / binCount;
       
       // Check if peak is prominent (stands out from surrounding frequencies)
       if (rangeMaxMagnitude > 0 && rangeAvgMagnitude > 0) {
@@ -145,7 +154,7 @@ export class VoicemailBeepDetector extends BaseApplication {
           // This is a valid peak in the range
           if (rangeMaxMagnitude > peakMagnitude) {
             peakMagnitude = rangeMaxMagnitude;
-            detectedFrequency = (rangePeakBin * this.sampleRate) / (this.fftSize * 2);
+            detectedFrequency = (rangePeakBin * this.sampleRate) / this.fftSize;
           }
         }
       }

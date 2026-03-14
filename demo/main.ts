@@ -7,6 +7,13 @@ import { createBeepDetectorDemo } from './pages/BeepDetectorDemo';
 let currentCleanup: (() => void) | null = null;
 const router = new Router();
 
+const pages: { page: DemoPage; label: string }[] = [
+  { page: 'analyzers', label: 'All Analyzers' },
+  { page: 'vad', label: 'VAD' },
+  { page: 'denoiser', label: 'Denoiser' },
+  { page: 'beep-detector', label: 'Beep Detector' },
+];
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', () => {
   const appDiv = document.getElementById("app");
@@ -26,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load initial page
   loadPage(router.getCurrentPage(), contentContainer);
 
-  // Handle navigation
+  // Handle navigation (including browser back/forward)
   router.onNavigate((page) => {
     if (currentCleanup) {
       currentCleanup();
@@ -34,6 +41,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     contentContainer.innerHTML = '';
     loadPage(page, contentContainer);
+
+    // Sync active nav button state (for browser back/forward)
+    document.querySelectorAll('.demo-nav-button').forEach(btn => {
+      btn.classList.toggle('active', (btn as HTMLElement).dataset.page === page);
+    });
   });
 });
 
@@ -49,13 +61,6 @@ function createNavigation(container: HTMLElement): void {
   const navButtons = document.createElement('div');
   navButtons.className = 'demo-nav-buttons';
 
-  const pages: { page: DemoPage; label: string }[] = [
-    { page: 'analyzers', label: 'All Analyzers' },
-    { page: 'vad', label: 'VAD' },
-    { page: 'denoiser', label: 'Denoiser' },
-    { page: 'beep-detector', label: 'Beep Detector' },
-  ];
-
   pages.forEach(({ page, label }) => {
     const button = document.createElement('button');
     button.textContent = label;
@@ -66,9 +71,9 @@ function createNavigation(container: HTMLElement): void {
       button.classList.add('active');
     }
 
+    button.dataset.page = page;
     button.addEventListener('click', () => {
       router.navigate(page);
-      // Update button styles
       navButtons.querySelectorAll('button').forEach(btn => {
         btn.classList.remove('active');
       });

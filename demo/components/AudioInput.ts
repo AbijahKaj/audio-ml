@@ -23,36 +23,15 @@ export class AudioInput {
   private audioElement: HTMLAudioElement | null = null;
   private listeners: Map<string, Set<Function>> = new Map();
   private sampleRate: number = 44100;
-  private workletReady: Promise<void> | null = null;
   private frameBuffer: Float32Array = new Float32Array(0);
-  private targetFrameSize: number = 1024; // Default target frame size for analyzers
+  private targetFrameSize: number = 1024;
 
   constructor(sampleRate: number = 44100) {
     this.sampleRate = sampleRate;
-    // Initialize AudioWorklet module loading
-    this.initializeWorklet();
   }
 
-  /**
-   * Initialize AudioWorklet processor
-   */
-  private async initializeWorklet(): Promise<void> {
-    if (this.workletReady) {
-      return this.workletReady;
-    }
-
-    // Create a temporary context to load the worklet
-    const tempCtx = new AudioContext({ sampleRate: this.sampleRate });
-    this.workletReady = tempCtx.audioWorklet.addModule(
-      new URL('./pcm-processor.js', import.meta.url)
-    ).then(() => {
-      tempCtx.close();
-    }).catch((error) => {
-      console.error('Failed to load AudioWorklet processor:', error);
-      throw error;
-    });
-
-    return this.workletReady;
+  private getWorkletUrl(): URL {
+    return new URL('./pcm-processor.js', import.meta.url);
   }
 
   /**
@@ -102,9 +81,6 @@ export class AudioInput {
     }
 
     try {
-      // Ensure worklet is loaded
-      await this.initializeWorklet();
-
       this.mode = 'microphone';
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -116,11 +92,7 @@ export class AudioInput {
       });
 
       this.audioCtx = new AudioContext({ sampleRate: this.sampleRate });
-      
-      // Load worklet module for this context
-      await this.audioCtx.audioWorklet.addModule(
-        new URL('./pcm-processor.js', import.meta.url)
-      );
+      await this.audioCtx.audioWorklet.addModule(this.getWorkletUrl());
 
       const source = this.audioCtx.createMediaStreamSource(this.stream);
 
@@ -159,18 +131,9 @@ export class AudioInput {
     }
 
     try {
-      // Ensure worklet is loaded
-      await this.initializeWorklet();
-
       this.mode = 'file';
-      
-      // Create audio context
       this.audioCtx = new AudioContext({ sampleRate: this.sampleRate });
-
-      // Load worklet module for this context
-      await this.audioCtx.audioWorklet.addModule(
-        new URL('./pcm-processor.js', import.meta.url)
-      );
+      await this.audioCtx.audioWorklet.addModule(this.getWorkletUrl());
 
       // Create audio element for playback
       const audioUrl = URL.createObjectURL(file);

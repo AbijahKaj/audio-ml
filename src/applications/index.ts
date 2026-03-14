@@ -29,7 +29,7 @@ export type {
 export { VAD, type VADConfig } from './speech/VAD';
 
 // Detection applications
-export { VoicemailBeepDetector, type VoicemailBeepDetectorConfig } from './detection/VoicemailBeepDetector';
+export { VoicemailBeepDetector, type VoicemailBeepDetectorConfig, type FrequencyRange } from './detection/VoicemailBeepDetector';
 
 // Processing applications
 export { AudioDenoiser, type AudioDenoiserConfig } from './processing/AudioDenoiser';

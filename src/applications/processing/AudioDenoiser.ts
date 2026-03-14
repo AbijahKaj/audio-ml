@@ -181,10 +181,10 @@ export class AudioDenoiser extends BaseApplication {
       const denoisedTime = new Float32Array(this.fftSize);
       this.fft.inverseTransform(denoisedTime, denoisedSpectrum);
       
-      // Normalize and apply window
+      // Normalize (synthesis window is NOT applied — the analysis window already
+      // shaped the spectrum; applying it again would double-attenuate the signal)
       for (let i = 0; i < this.fftSize; i++) {
-        denoisedTime[i] = denoisedTime[i] / this.fftSize;
-        denoisedTime[i] *= this.window[i]; // Apply window to reduce artifacts
+        denoisedTime[i] /= this.fftSize;
       }
 
       // Calculate SNR (approximate)
@@ -230,6 +230,13 @@ export class AudioDenoiser extends BaseApplication {
     this.noiseEstimationBuffer = [];
     this.frameCount = 0;
     this.isNoiseEstimationComplete = false;
+  }
+
+  /**
+   * Whether noise estimation has completed
+   */
+  get noiseEstimated(): boolean {
+    return this.isNoiseEstimationComplete;
   }
 
   /**

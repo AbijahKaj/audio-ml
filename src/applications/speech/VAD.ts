@@ -43,6 +43,7 @@ export class VAD extends BaseApplication {
   private consecutiveSpeechFrames: number = 0;
   private consecutiveSilenceFrames: number = 0;
   private isCurrentlySpeech: boolean = false;
+  private lastConfidence: number = 0;
 
   constructor(config: VADConfig) {
     super(config);
@@ -89,6 +90,7 @@ export class VAD extends BaseApplication {
     const centroidScore = hasCentroid ? 0.1 : 0;
 
     const confidence = Math.min(1.0, energyScore + zcrScore + flatnessScore + centroidScore);
+    this.lastConfidence = confidence;
     // Require at least 2 indicators (energy + one other) for speech
     const isSpeechFrame = confidence >= 0.5 && (hasEnergy && (hasLowZCR || hasLowFlatness || hasCentroid));
 
@@ -131,6 +133,7 @@ export class VAD extends BaseApplication {
     this.consecutiveSpeechFrames = 0;
     this.consecutiveSilenceFrames = 0;
     this.isCurrentlySpeech = false;
+    this.lastConfidence = 0;
   }
 
   /**
@@ -139,7 +142,7 @@ export class VAD extends BaseApplication {
   getState(): { isSpeech: boolean; confidence: number } {
     return {
       isSpeech: this.isCurrentlySpeech,
-      confidence: this.isCurrentlySpeech ? 0.8 : 0.2
+      confidence: this.lastConfidence
     };
   }
 }

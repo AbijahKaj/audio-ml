@@ -112,10 +112,6 @@ export function createVADDemo(container: HTMLElement): () => void {
     addLog(`Speech ended (confidence: ${Math.round(data.confidence * 100)}%)`, 'silence');
   });
 
-  vad.on('frame', () => {
-    // Continuous updates handled in pcmHandler
-  });
-
   // Cleanup
   return () => {
     audioInput?.off('pcm-data', pcmHandler);
