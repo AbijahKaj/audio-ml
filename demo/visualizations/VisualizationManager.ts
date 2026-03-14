@@ -21,22 +21,24 @@ import {
   visualizeFFT,
 } from './analyzerVisualizers';
 
-import { MFCCAnalyzer } from '../../src/analysis/MFCCAnalyzer';
-import { PLPAnalyzer } from '../../src/analysis/PLPAnalyzer';
-import { ChromaFeaturesAnalyzer } from '../../src/analysis/ChromaFeaturesAnalyzer';
-import { LPCAnalyzer } from '../../src/analysis/LPCAnalyzer';
-import { ConstantQTransformAnalyzer } from '../../src/analysis/ConstantQTransformAnalyzer';
-import { WaveletTransformAnalyzer } from '../../src/analysis/WaveletTransformAnalyzer';
-import { WaveformEnvelopeAnalyzer } from '../../src/analysis/WaveformEnvelopeAnalyzer';
-import { AutocorrelationAnalyzer } from '../../src/analysis/AutocorrelationAnalyzer';
-import { SpectralCentroidAnalyzer } from '../../src/analysis/SpectralCentroidAnalyzer';
-import { SpectralRolloffAnalyzer } from '../../src/analysis/SpectralRolloffAnalyzer';
-import { SpectralBandwidthAnalyzer } from '../../src/analysis/SpectralBandwidthAnalyzer';
-import { SpectralFlatnessAnalyzer } from '../../src/analysis/SpectralFlatnessAnalyzer';
-import { ZeroCrossingRateAnalyzer } from '../../src/analysis/ZeroCrossingRateAnalyzer';
-import { RMSEAnalyzer } from '../../src/analysis/RMSEAnalyzer';
-import { MelSpectrogramAnalyzer } from '../../src/analysis/MelSpectrogramAnalyzer';
-import { FFTAnalyzer } from '../../src/analysis/FFTAnalyzer';
+import {
+  MFCCAnalyzer,
+  PLPAnalyzer,
+  ChromaFeaturesAnalyzer,
+  LPCAnalyzer,
+  ConstantQTransformAnalyzer,
+  WaveletTransformAnalyzer,
+  WaveformEnvelopeAnalyzer,
+  AutocorrelationAnalyzer,
+  SpectralCentroidAnalyzer,
+  SpectralRolloffAnalyzer,
+  SpectralBandwidthAnalyzer,
+  SpectralFlatnessAnalyzer,
+  ZeroCrossingRateAnalyzer,
+  RMSEAnalyzer,
+  MelSpectrogramAnalyzer,
+  FFTAnalyzer,
+} from 'audio-ml';
 import { analyzerInfoMap } from './analyzerInfo';
 
 export interface AnalyzerVisualization {

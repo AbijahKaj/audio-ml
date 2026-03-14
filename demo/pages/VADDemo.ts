@@ -2,7 +2,7 @@
  * VAD (Voice Activity Detection) Demo Page
  */
 
-import { VAD } from '../../src/applications/speech/VAD';
+import { VAD } from 'audio-ml/applications';
 import { AudioInput } from '../components/AudioInput';
 import { AudioInputUI } from '../components/AudioInputUI';
 

@@ -5,7 +5,9 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "predev": "cd .. && npm run build:package",
     "dev": "vite",
+    "prebuild": "cd .. && npm run build:package",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -14,7 +16,7 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
-    "audio-ml": "file:..",
+    "audio-ml": "link:..",
     "fft.js": "^4.0.4"
   }
 }

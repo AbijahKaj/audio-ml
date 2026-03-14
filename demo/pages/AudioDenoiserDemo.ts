@@ -3,7 +3,7 @@
  * Records denoised audio output
  */
 
-import { AudioDenoiser } from '../../src/applications/processing/AudioDenoiser';
+import { AudioDenoiser } from 'audio-ml/applications';
 import { AudioInput } from '../components/AudioInput';
 import { AudioInputUI } from '../components/AudioInputUI';
 

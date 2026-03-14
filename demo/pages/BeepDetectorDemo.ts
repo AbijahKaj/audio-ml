@@ -2,7 +2,7 @@
  * Voicemail Beep Detector Demo Page
  */
 
-import { VoicemailBeepDetector } from '../../src/applications/detection/VoicemailBeepDetector';
+import { VoicemailBeepDetector } from 'audio-ml/applications';
 import { AudioInput } from '../components/AudioInput';
 import { AudioInputUI } from '../components/AudioInputUI';
 
