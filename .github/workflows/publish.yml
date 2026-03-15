@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           # Using OIDC for authentication (no token needed)
 
@@ -54,11 +54,9 @@ jobs:
           echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
 
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ github.token }}
-        run: npm publish --access public --provenance
-        # The --provenance flag enables package provenance attestation
-        # This provides cryptographic proof that the package was built in this CI/CD pipeline
+        run: npm publish --access public
+        # OIDC trusted publishing handles auth automatically (requires Node 22.14+ / npm 11.5+)
+        # Provenance attestation is generated automatically when publishing via trusted publishing
 
       - name: Create git tag if it doesn't exist
         id: create-tag
