@@ -54,8 +54,9 @@ jobs:
           echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
 
       - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
         run: npm publish --access public --provenance
-        # Using OIDC authentication (configured in setup-node step)
         # The --provenance flag enables package provenance attestation
         # This provides cryptographic proof that the package was built in this CI/CD pipeline
 
