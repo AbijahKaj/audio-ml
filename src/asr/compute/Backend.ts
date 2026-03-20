@@ -63,6 +63,13 @@ export interface ComputeBackend {
     stride: number,
     padding: number
   ): TensorHandle;
+  depthwiseConv2d(
+    input: TensorHandle,
+    kernel: TensorHandle,
+    strides: [number, number],
+    padding: 'valid' | 'same',
+    bias?: TensorHandle
+  ): TensorHandle;
 
   reshape(x: TensorHandle, shape: Shape): TensorHandle;
   transpose(x: TensorHandle, perm: number[]): TensorHandle;

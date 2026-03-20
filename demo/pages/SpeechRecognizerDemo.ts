@@ -1,0 +1,332 @@
+/**
+ * Speech Recognizer (ASR) Demo Page
+ *
+ * Loads a FastConformer model, streams mic / file audio through the
+ * SpeechRecognizer and displays live transcription results.
+ */
+
+import { SpeechRecognizer, type ASRResult } from 'audio-ml/asr';
+import { AudioInput } from '../components/AudioInput';
+import { AudioInputUI } from '../components/AudioInputUI';
+
+const INPUT_SAMPLE_RATE = 16_000;
+
+interface ModelSpec {
+  label: string;
+  configUrl: string;
+  weightsUrl: string;
+  vocabUrl: string;
+  description: string;
+}
+
+const MODELS: Record<string, ModelSpec> = {
+  parakeet120m: {
+    label: 'Parakeet 120 M (RNNT)',
+    configUrl: '/models/parakeet_120m/model_config.json',
+    weightsUrl: '/models/parakeet_120m/model.safetensors',
+    vocabUrl: '/models/parakeet_120m/vocab.json',
+    description: 'English-only, 120 M params — lightweight, ideal for browser',
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/*  Cache API helper — avoids re-downloading ~120 MB on every reload  */
+/* ------------------------------------------------------------------ */
+
+const MODEL_CACHE_NAME = 'asr-models-v1';
+
+async function fetchCached(url: string, onProgress?: (pct: number) => void): Promise<ArrayBuffer> {
+  const cache = await caches.open(MODEL_CACHE_NAME);
+  const cached = await cache.match(url);
+  if (cached) return cached.arrayBuffer();
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
+
+  const contentLength = Number(response.headers.get('content-length') ?? 0);
+  const reader = response.body?.getReader();
+  if (!reader || contentLength === 0) {
+    const buf = await response.clone().arrayBuffer();
+    await cache.put(url, response);
+    return buf;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    onProgress?.(contentLength > 0 ? received / contentLength : 0);
+  }
+
+  const buf = new Uint8Array(received);
+  let pos = 0;
+  for (const c of chunks) {
+    buf.set(c, pos);
+    pos += c.length;
+  }
+
+  const cacheResponse = new Response(buf, {
+    headers: { 'Content-Type': 'application/octet-stream' },
+  });
+  await cache.put(url, cacheResponse);
+  return buf.buffer;
+}
+
+async function fetchTextCached(url: string): Promise<string> {
+  const cache = await caches.open(MODEL_CACHE_NAME);
+  const cached = await cache.match(url);
+  if (cached) return cached.text();
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
+  const text = await response.text();
+  await cache.put(url, new Response(text, { headers: { 'Content-Type': 'application/json' } }));
+  return text;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Demo page                                                          */
+/* ------------------------------------------------------------------ */
+
+export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
+  let recognizer: SpeechRecognizer | null = null;
+  let audioInput: AudioInput | null = null;
+  let destroyed = false;
+
+  // ---- layout ----
+  const wrapper = el('div', 'asr-wrapper');
+
+  const header = el('div', 'asr-header');
+  header.innerHTML = `<h2 class="asr-title">Speech Recognition</h2>
+    <p class="asr-subtitle">FastConformer RNNT / TDT &mdash; runs entirely in the browser via TensorFlow.js</p>`;
+  wrapper.appendChild(header);
+
+  // model loading section
+  const loadSection = el('div', 'asr-load-section');
+  const backendSelect = document.createElement('select');
+  backendSelect.className = 'asr-select';
+  for (const [value, label] of [['wasm', 'WASM (CPU)'], ['webgpu', 'WebGPU'], ['webgl', 'WebGL']] as const) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    if (value === 'webgpu' && !('gpu' in navigator)) opt.disabled = true;
+    backendSelect.appendChild(opt);
+  }
+
+  const loadBtn = document.createElement('button');
+  loadBtn.className = 'asr-load-btn';
+  loadBtn.textContent = 'Load Model';
+
+  const progressBar = el('div', 'asr-progress-bar');
+  const progressFill = el('div', 'asr-progress-fill');
+  progressBar.appendChild(progressFill);
+
+  const statusLabel = el('div', 'asr-status');
+  statusLabel.textContent = 'Model not loaded';
+
+  loadSection.append(backendSelect, loadBtn, progressBar, statusLabel);
+  wrapper.appendChild(loadSection);
+
+  // audio input section (hidden until model loaded)
+  const audioSection = el('div', 'asr-audio-section');
+  audioSection.style.display = 'none';
+  wrapper.appendChild(audioSection);
+
+  // transcript area
+  const transcriptSection = el('div', 'asr-transcript-section');
+  transcriptSection.style.display = 'none';
+
+  const transcriptTitle = el('h3', 'asr-transcript-title');
+  transcriptTitle.textContent = 'Transcription';
+  transcriptSection.appendChild(transcriptTitle);
+
+  const partialLine = el('div', 'asr-partial');
+  partialLine.textContent = '';
+  transcriptSection.appendChild(partialLine);
+
+  const transcriptLog = el('div', 'asr-transcript-log');
+  transcriptSection.appendChild(transcriptLog);
+
+  const latencyLabel = el('div', 'asr-latency');
+  transcriptSection.appendChild(latencyLabel);
+
+  wrapper.appendChild(transcriptSection);
+
+  // explainer
+  const explainer = el('div', 'app-explainer');
+  explainer.innerHTML = `
+    <h2 class="app-explainer-title">How It Works</h2>
+    <p class="app-explainer-description">
+      This demo runs NVIDIA's FastConformer ASR model <strong>entirely in the browser</strong>
+      using <code>TensorFlow.js</code>. No audio leaves your device.
+    </p>
+    <div class="app-explainer-phases">
+      <div class="app-explainer-phase">
+        <h4>1. Feature Extraction</h4>
+        <p>Raw PCM is converted to 80-band log-mel spectrograms (25 ms window, 10 ms hop).</p>
+      </div>
+      <div class="app-explainer-phase">
+        <h4>2. FastConformer Encoder</h4>
+        <p>17 Conformer blocks with multi-head self-attention, depthwise convolutions,
+           and feed-forward layers downsample the features 8&times; in time.</p>
+      </div>
+      <div class="app-explainer-phase">
+        <h4>3. Transducer Decoder</h4>
+        <p>An RNNT (or TDT) decoder with an LSTM prediction network emits subword
+           tokens frame-by-frame. TDT skips frames for 2&ndash;5&times; faster decoding.</p>
+      </div>
+      <div class="app-explainer-phase">
+        <h4>4. SentencePiece Detokenizer</h4>
+        <p>Subword token IDs are mapped back to text using the model's BPE vocabulary.</p>
+      </div>
+    </div>
+    <p class="app-explainer-detail">
+      Model weights are cached in the browser after the first download using the
+      <code>Cache API</code>, so subsequent loads are instant.
+    </p>
+  `;
+  wrapper.appendChild(explainer);
+
+  container.appendChild(wrapper);
+
+  // ---- wiring ----
+
+  loadBtn.addEventListener('click', async () => {
+    if (recognizer) return;
+    loadBtn.disabled = true;
+    loadBtn.textContent = 'Loading...';
+
+    try {
+      const spec = MODELS.parakeet120m;
+      const backend = backendSelect.value as 'wasm' | 'webgpu' | 'webgl';
+
+      setStatus('Downloading config & vocab...');
+      setProgress(0);
+
+      const [configJson, vocabJson] = await Promise.all([
+        fetchTextCached(spec.configUrl),
+        fetchTextCached(spec.vocabUrl),
+      ]);
+
+      setStatus('Downloading model weights...');
+      const modelBuf = await fetchCached(spec.weightsUrl, pct => setProgress(pct * 0.9));
+
+      if (destroyed) return;
+
+      setStatus('Initialising TensorFlow.js...');
+      setProgress(0.92);
+
+      recognizer = new SpeechRecognizer({
+        sampleRate: INPUT_SAMPLE_RATE,
+        modelPath: spec.weightsUrl,
+        configPath: spec.configUrl,
+        vocabPath: spec.vocabUrl,
+        backend,
+        inputSampleRate: INPUT_SAMPLE_RATE,
+        streaming: true,
+        chunkSizeMs: 320,
+        fftSize: 512,
+      });
+
+      await recognizer.loadFromBuffers(modelBuf, configJson, vocabJson);
+
+      if (destroyed) return;
+
+      setProgress(1);
+      setStatus(`Model loaded (${backend.toUpperCase()})`);
+      showAudioUI();
+    } catch (err) {
+      setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      loadBtn.disabled = false;
+      loadBtn.textContent = 'Retry';
+    }
+  });
+
+  function showAudioUI() {
+    audioSection.style.display = '';
+    transcriptSection.style.display = '';
+    loadBtn.style.display = 'none';
+    backendSelect.style.display = 'none';
+
+    audioInput = new AudioInput(INPUT_SAMPLE_RATE);
+    new AudioInputUI(audioSection, audioInput);
+
+    audioInput.on('pcm-data', async (pcm: Float32Array) => {
+      if (!recognizer) return;
+      const result = await recognizer.processFrameAsync(pcm);
+      if (result) {
+        partialLine.textContent = result.text;
+        latencyLabel.textContent = `Latency: ${Math.round(result.latencyMs)} ms | Decoder: ${result.decoderType.toUpperCase()}`;
+      }
+    });
+
+    audioInput.on('start', () => {
+      partialLine.textContent = '';
+      recognizer?.start();
+    });
+
+    audioInput.on('stop', async () => {
+      if (!recognizer) return;
+      const final = await recognizer.finalizeUtterance();
+      if (final.text.trim()) {
+        appendTranscript(final);
+      }
+      partialLine.textContent = '';
+      recognizer.reset();
+    });
+
+    recognizer?.on('partial', (data: { text: string }) => {
+      partialLine.textContent = data.text;
+    });
+
+    recognizer?.on('final', (result: ASRResult) => {
+      appendTranscript(result);
+      partialLine.textContent = '';
+    });
+  }
+
+  function appendTranscript(result: ASRResult) {
+    const entry = el('div', 'asr-transcript-entry');
+    const time = new Date().toLocaleTimeString();
+    const meta = `${Math.round(result.latencyMs)} ms · ${result.decoderType.toUpperCase()} · ${result.tokenCount} tokens`;
+    entry.innerHTML = `<span class="asr-transcript-time">[${time}]</span> ${escapeHtml(result.text)} <span class="asr-transcript-meta">${meta}</span>`;
+    transcriptLog.prepend(entry);
+  }
+
+  // ---- helpers ----
+
+  function setProgress(pct: number) {
+    progressFill.style.width = `${Math.round(pct * 100)}%`;
+  }
+
+  function setStatus(msg: string) {
+    statusLabel.textContent = msg;
+  }
+
+  // ---- cleanup ----
+  return () => {
+    destroyed = true;
+    audioInput?.stop();
+    recognizer?.stop();
+    wrapper.remove();
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tiny DOM helpers                                                   */
+/* ------------------------------------------------------------------ */
+
+function el(tag: string, className?: string): HTMLDivElement {
+  const e = document.createElement(tag) as HTMLDivElement;
+  if (className) e.className = className;
+  return e;
+}
+
+function escapeHtml(s: string): string {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}

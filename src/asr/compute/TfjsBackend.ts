@@ -217,6 +217,27 @@ export class TfjsBackend implements ComputeBackend {
     });
   }
 
+  depthwiseConv2d(
+    input: TensorHandle,
+    kernel: TensorHandle,
+    strides: [number, number],
+    padding: 'valid' | 'same',
+    bias?: TensorHandle
+  ): TensorHandle {
+    return tf.tidy(() => {
+      let result = tf.depthwiseConv2d(
+        T(input) as tf.Tensor4D,
+        T(kernel) as tf.Tensor4D,
+        strides,
+        padding
+      );
+      if (bias) {
+        result = tf.add(result, T(bias)) as tf.Tensor4D;
+      }
+      return result;
+    });
+  }
+
   reshape(x: TensorHandle, shape: Shape): TensorHandle {
     return tf.reshape(T(x), shape as number[]);
   }

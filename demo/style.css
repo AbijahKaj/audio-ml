@@ -556,3 +556,161 @@ button:focus-visible {
   background-color: #646cff;
   color: #fff;
 }
+
+/* Speech Recognizer (ASR) Demo Styles */
+.asr-wrapper {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.asr-header {
+  margin-bottom: 1.5rem;
+}
+
+.asr-title {
+  color: #fff;
+  margin: 0 0 0.25rem 0;
+  font-size: 1.6rem;
+}
+
+.asr-subtitle {
+  color: #888;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.asr-load-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.asr-select {
+  background-color: #2a2a2a;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.asr-select option:disabled {
+  color: #666;
+}
+
+.asr-load-btn {
+  padding: 0.7rem 2rem;
+  font-size: 1rem;
+  background-color: #646cff;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.asr-load-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.asr-progress-bar {
+  width: 100%;
+  max-width: 400px;
+  height: 6px;
+  background-color: #2a2a2a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.asr-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #646cff, #00ff88);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.asr-status {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.asr-audio-section {
+  margin-bottom: 1.5rem;
+}
+
+.asr-transcript-section {
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.asr-transcript-title {
+  color: #fff;
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+}
+
+.asr-partial {
+  font-size: 1.15rem;
+  color: #bbb;
+  min-height: 1.8rem;
+  padding: 0.75rem;
+  background-color: #222;
+  border-radius: 6px;
+  border-left: 3px solid #646cff;
+  margin-bottom: 1rem;
+  font-style: italic;
+}
+
+.asr-transcript-log {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.asr-transcript-entry {
+  padding: 0.6rem 0.75rem;
+  background-color: #222;
+  border-radius: 6px;
+  border-left: 3px solid #00ff88;
+  font-size: 0.95rem;
+  color: #ddd;
+  line-height: 1.5;
+}
+
+.asr-transcript-time {
+  color: #666;
+  font-family: monospace;
+  font-size: 0.8rem;
+  margin-right: 0.4rem;
+}
+
+.asr-transcript-meta {
+  color: #555;
+  font-size: 0.75rem;
+  font-family: monospace;
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.asr-latency {
+  color: #666;
+  font-size: 0.8rem;
+  font-family: monospace;
+  margin-top: 0.75rem;
+  text-align: right;
+}
