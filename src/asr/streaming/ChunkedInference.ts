@@ -1,5 +1,4 @@
 import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
 import type { FastConformerConfig } from '../model/ModelConfig';
 import { FeaturePipeline } from '../features/FeaturePipeline';
 import { FastConformerEncoder, type StreamingEncoderState } from '../encoder/FastConformerEncoder';
@@ -47,7 +46,6 @@ export class ChunkedInference {
   private resampler: Resampler | null;
 
   private chunkSizeSamples: number;
-  private maxContextFrames: number;
   private state: StreamingState;
 
   constructor(
@@ -65,7 +63,6 @@ export class ChunkedInference {
     this.encoder = encoder;
     this.decoder = decoder;
     this.tokenizer = tokenizer;
-    this.maxContextFrames = inferenceConfig.maxContextFrames;
 
     const inputSampleRate = inferenceConfig.inputSampleRate ?? config.sampleRate;
     this.chunkSizeSamples = Math.round(inputSampleRate * inferenceConfig.chunkSizeMs / 1000);
@@ -153,10 +150,12 @@ export class ChunkedInference {
     const start = performance.now();
 
     // Extract one chunk
-    const chunkAudio = this.state.audioBuffer.slice(0, this.chunkSizeSamples);
-    this.state.audioBuffer = this.state.audioBuffer.slice(this.chunkSizeSamples);
+    const chunkAudio = new Float32Array(this.state.audioBuffer.buffer, 0, this.chunkSizeSamples);
+    const remaining = new Float32Array(this.state.audioBuffer.length - this.chunkSizeSamples);
+    remaining.set(this.state.audioBuffer.subarray(this.chunkSizeSamples));
+    this.state.audioBuffer = remaining;
 
-    let audio = chunkAudio;
+    let audio: Float32Array = new Float32Array(chunkAudio);
     if (this.resampler) {
       audio = this.resampler.resample(audio);
     }

@@ -23,9 +23,8 @@ export class ConvSubsampling {
   private conv2Bias: TensorHandle;
   private outWeight: TensorHandle;
   private outBias: TensorHandle;
-  private dModel: number;
 
-  constructor(backend: ComputeBackend, weights: SubsamplingWeights, config: FastConformerConfig) {
+  constructor(backend: ComputeBackend, weights: SubsamplingWeights, _config: FastConformerConfig) {
     this.backend = backend;
     this.conv1Weight = weights.conv1Weight;
     this.conv1Bias = weights.conv1Bias;
@@ -33,15 +32,12 @@ export class ConvSubsampling {
     this.conv2Bias = weights.conv2Bias;
     this.outWeight = weights.outWeight;
     this.outBias = weights.outBias;
-    this.dModel = config.dModel;
   }
 
   forward(melFeatures: TensorHandle): TensorHandle {
     return this.backend.tidy(() => {
       const shape = this.backend.getShape(melFeatures);
       const B = shape[0] as number;
-      const T = shape[1] as number;
-      const F = shape[2] as number;
 
       // [B, T, F] -> [B, T, F, 1] for Conv2D
       let x = this.backend.expandDims(melFeatures, 3);

@@ -298,6 +298,6 @@ export class TfjsBackend implements ComputeBackend {
   }
 
   tidy<R>(fn: () => R): R {
-    return tf.tidy(fn);
+    return tf.tidy(fn as () => tf.TensorContainer) as R;
   }
 }

@@ -7,17 +7,6 @@ interface SafeTensorMeta {
   data_offsets: [number, number];
 }
 
-function dtypeToByteSize(dtype: string): number {
-  switch (dtype) {
-    case 'F32': return 4;
-    case 'F16': return 2;
-    case 'I32': return 4;
-    case 'I64': return 8;
-    case 'BF16': return 2;
-    default: return 4;
-  }
-}
-
 function convertToFloat32(data: ArrayBuffer, dtype: string, shape: number[]): Float32Array {
   const numElements = shape.reduce((a, b) => a * b, 1);
 
@@ -101,7 +90,6 @@ export async function loadSafeTensors(
     const tensorMeta = meta as SafeTensorMeta;
     const [start, end] = tensorMeta.data_offsets;
     const rawData = buffer.slice(dataStart + start, dataStart + end);
-    const _byteSize = dtypeToByteSize(tensorMeta.dtype);
     const float32Data = convertToFloat32(rawData, tensorMeta.dtype, tensorMeta.shape);
     tensors.set(name, backend.tensor(float32Data, tensorMeta.shape));
   }

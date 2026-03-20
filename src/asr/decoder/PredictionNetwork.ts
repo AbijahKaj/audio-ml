@@ -22,7 +22,6 @@ export class PredictionNetwork {
   private outputProj: Linear;
   private hiddenSize: number;
   private numLayers: number;
-  private embedDim: number;
 
   constructor(backend: ComputeBackend, weights: PredictionNetworkWeights, hiddenSize: number) {
     this.backend = backend;
@@ -34,9 +33,6 @@ export class PredictionNetwork {
     this.outputProj = new Linear(backend, weights.outputProj);
     this.hiddenSize = hiddenSize;
     this.numLayers = weights.lstmWeightsIH.length;
-
-    const embShape = backend.getShape(weights.embedding);
-    this.embedDim = embShape[1] as number;
   }
 
   step(
