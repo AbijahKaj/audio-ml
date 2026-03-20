@@ -27,6 +27,12 @@ export type {
 
 // Speech applications
 export { VAD, type VADConfig } from './speech/VAD';
+export {
+  SpeechRecognizer,
+  type SpeechRecognizerConfig,
+  type ASRResult,
+  type StreamingASRResult,
+} from './speech/SpeechRecognizer';
 
 // Detection applications
 export { VoicemailBeepDetector, type VoicemailBeepDetectorConfig, type FrequencyRange } from './detection/VoicemailBeepDetector';
