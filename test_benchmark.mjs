@@ -46,7 +46,7 @@ async function main() {
 
   // ── Find audio files ──
   const audioFiles = readdirSync(AUDIO_DIR)
-    .filter(f => f.startsWith('libri_') && f.endsWith('.f32'))
+    .filter(f => /^libri_\d+\.f32$/.test(f))
     .sort();
 
   if (audioFiles.length === 0) {
