@@ -302,10 +302,14 @@ function mapPrediction(lookup: WeightLookup): PredictionWeights {
 }
 
 function mapJoint(lookup: WeightLookup, config: FastConformerConfig): JointWeights {
+  const hasHiddenProj = Boolean(
+    lookup.maybe(['joint.joint_net.0.weight', 'joint.hidden.weight']),
+  );
+
   const joint: JointWeights = {
     encoderProj: mapLinear(lookup, ['joint.enc', 'joint.encoder_proj', 'joint.joint_enc']),
     predictionProj: mapLinear(lookup, ['joint.pred', 'joint.prediction_proj', 'joint.joint_pred']),
-    hiddenProj: mapLinear(lookup, ['joint.joint_net.0', 'joint.hidden']),
+    hiddenProj: hasHiddenProj ? mapLinear(lookup, ['joint.joint_net.0', 'joint.hidden']) : undefined,
     tokenProj: mapLinear(lookup, ['joint.joint_net.2', 'joint.token_proj', 'joint.vocab_proj']),
   };
 
