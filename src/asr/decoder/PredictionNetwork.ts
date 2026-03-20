@@ -8,10 +8,6 @@ export interface PredictionState {
   c: TensorHandle[];
 }
 
-/**
- * LSTM-based prediction network for both RNNT and TDT decoders.
- * Conditions on previously emitted tokens.
- */
 export class PredictionNetwork {
   private backend: ComputeBackend;
   private embedding: TensorHandle;
@@ -19,7 +15,7 @@ export class PredictionNetwork {
   private lstmWeightsHH: TensorHandle[];
   private lstmBiasIH: TensorHandle[];
   private lstmBiasHH: TensorHandle[];
-  private outputProj: Linear;
+  private outputProj: Linear | null;
   private hiddenSize: number;
   private numLayers: number;
 
@@ -30,7 +26,7 @@ export class PredictionNetwork {
     this.lstmWeightsHH = weights.lstmWeightsHH;
     this.lstmBiasIH = weights.lstmBiasIH;
     this.lstmBiasHH = weights.lstmBiasHH;
-    this.outputProj = new Linear(backend, weights.outputProj);
+    this.outputProj = weights.outputProj ? new Linear(backend, weights.outputProj) : null;
     this.hiddenSize = hiddenSize;
     this.numLayers = weights.lstmWeightsIH.length;
   }
@@ -39,7 +35,6 @@ export class PredictionNetwork {
     tokenId: number,
     state: PredictionState,
   ): { output: TensorHandle; newState: PredictionState } {
-    // Embed the token
     const idxTensor = this.backend.tensor(new Int32Array([tokenId]), [1]);
     let x = this.backend.gather(this.embedding, idxTensor, 0); // [1, embed_dim]
     this.backend.dispose(idxTensor);
@@ -47,16 +42,21 @@ export class PredictionNetwork {
     const newH: TensorHandle[] = [];
     const newC: TensorHandle[] = [];
 
-    // Run through LSTM layers
     for (let l = 0; l < this.numLayers; l++) {
       const result = this.lstmCell(x, state.h[l], state.c[l], l);
+      if (l > 0) this.backend.dispose(x);
       x = result.h;
-      newH.push(result.h);
+      newH.push(this.backend.clone(result.h));
       newC.push(result.c);
     }
 
-    // Output projection
-    const output = this.outputProj.forward(x);
+    let output: TensorHandle;
+    if (this.outputProj) {
+      output = this.outputProj.forward(x);
+      this.backend.dispose(x);
+    } else {
+      output = x;
+    }
 
     return {
       output,
@@ -87,7 +87,6 @@ export class PredictionNetwork {
     layer: number,
   ): { h: TensorHandle; c: TensorHandle } {
     return this.backend.tidy(() => {
-      // gates = input * W_ih^T + h * W_hh^T + b_ih + b_hh
       const wIH_T = this.backend.transpose(this.lstmWeightsIH[layer], [1, 0]);
       const wHH_T = this.backend.transpose(this.lstmWeightsHH[layer], [1, 0]);
 
@@ -97,20 +96,16 @@ export class PredictionNetwork {
       gates = this.backend.add(gates, this.lstmBiasIH[layer]);
       gates = this.backend.add(gates, this.lstmBiasHH[layer]);
 
-      // Split into 4 gate chunks: [i, f, g, o] each of size hidden_size
       const gateParts = this.backend.split(gates, 4, -1);
       const i = this.backend.sigmoid(gateParts[0]);
       const f = this.backend.sigmoid(gateParts[1]);
       const g = this.backend.tanh(gateParts[2]);
       const o = this.backend.sigmoid(gateParts[3]);
 
-      // c_new = f * c_prev + i * g
       const c = this.backend.add(
         this.backend.mul(f, prevC),
         this.backend.mul(i, g)
       );
-
-      // h_new = o * tanh(c_new)
       const h = this.backend.mul(o, this.backend.tanh(c));
 
       return { h, c };

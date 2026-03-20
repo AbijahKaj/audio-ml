@@ -22,16 +22,16 @@ export class ConvModule {
     this.backend = backend;
     this.normWeight = weights.norm.weight;
     this.normBias = weights.norm.bias;
-    this.pw1Weight = weights.pointwise1.weight;
-    this.pw1Bias = weights.pointwise1.bias;
+    this.pw1Weight = weights.pointwise1Weight;
+    this.pw1Bias = weights.pointwise1Bias;
     this.depthwiseWeight = weights.depthwiseWeight;
     this.depthwiseBias = weights.depthwiseBias;
     this.bnWeight = weights.batchNorm.weight;
     this.bnBias = weights.batchNorm.bias;
     this.bnMean = weights.batchNorm.runningMean;
     this.bnVar = weights.batchNorm.runningVar;
-    this.pw2Weight = weights.pointwise2.weight;
-    this.pw2Bias = weights.pointwise2.bias;
+    this.pw2Weight = weights.pointwise2Weight;
+    this.pw2Bias = weights.pointwise2Bias;
     this.kernelSize = kernelSize;
   }
 
@@ -40,24 +40,24 @@ export class ConvModule {
       let h = this.backend.layerNorm(x, this.normWeight, this.normBias, 1e-5);
 
       // Pointwise conv1 (expand): [B, T, d_model] -> [B, T, 2*d_model]
-      h = this.pointwiseConv(h, this.pw1Weight, this.pw1Bias);
+      h = this.conv1d(h, this.pw1Weight, this.pw1Bias);
 
-      // GLU gating
+      // GLU gating: split into two halves, sigmoid on second
       const parts = this.backend.split(h, 2, -1);
       h = this.backend.mul(parts[0], this.backend.sigmoid(parts[1]));
 
-      // Depthwise conv1d with causal-like padding
+      // Depthwise conv1d with symmetric padding
       const padding = Math.floor(this.kernelSize / 2);
       h = this.depthwiseConv(h, padding);
 
-      // BatchNorm
+      // BatchNorm (inference mode using running stats)
       h = this.backend.batchNorm(h, this.bnMean, this.bnVar, this.bnWeight, this.bnBias, 1e-5);
 
       // SiLU
       h = this.backend.silu(h);
 
       // Pointwise conv2 (project back): [B, T, d_model] -> [B, T, d_model]
-      h = this.pointwiseConv(h, this.pw2Weight, this.pw2Bias);
+      h = this.conv1d(h, this.pw2Weight, this.pw2Bias);
 
       return h;
     });
@@ -68,13 +68,11 @@ export class ConvModule {
     newConvState: TensorHandle;
   } {
     let h = this.backend.layerNorm(x, this.normWeight, this.normBias, 1e-5);
-
-    h = this.pointwiseConv(h, this.pw1Weight, this.pw1Bias);
+    h = this.conv1d(h, this.pw1Weight, this.pw1Bias);
 
     const parts = this.backend.split(h, 2, -1);
     h = this.backend.mul(parts[0], this.backend.sigmoid(parts[1]));
 
-    // For streaming, prepend cached conv state
     if (convState) {
       h = this.backend.concat([convState, h], 1);
     }
@@ -83,7 +81,6 @@ export class ConvModule {
     const chunkLen = this.backend.getShape(x)[1] as number;
     const stateLen = this.kernelSize - 1;
 
-    // Save state for next chunk
     const newStateStart = Math.max(0, totalLen - stateLen);
     const newConvState = this.backend.slice(
       h,
@@ -91,10 +88,8 @@ export class ConvModule {
       [this.backend.getShape(h)[0] as number, Math.min(stateLen, totalLen), this.backend.getShape(h)[2] as number]
     );
 
-    // Apply depthwise conv without extra padding (state provides left context)
     h = this.depthwiseConvNoPad(h);
 
-    // Trim to chunk length
     const convOutLen = this.backend.getShape(h)[1] as number;
     if (convOutLen > chunkLen) {
       h = this.backend.slice(h, [0, convOutLen - chunkLen, 0], [
@@ -106,38 +101,54 @@ export class ConvModule {
 
     h = this.backend.batchNorm(h, this.bnMean, this.bnVar, this.bnWeight, this.bnBias, 1e-5);
     h = this.backend.silu(h);
-    h = this.pointwiseConv(h, this.pw2Weight, this.pw2Bias);
+    h = this.conv1d(h, this.pw2Weight, this.pw2Bias);
 
     return { output: h, newConvState };
   }
 
-  private pointwiseConv(x: TensorHandle, weight: TensorHandle, bias: TensorHandle | null): TensorHandle {
-    // Pointwise is just a linear: [B, T, C_in] x [C_out, C_in]^T -> [B, T, C_out]
-    const wT = this.backend.transpose(weight, [1, 0]);
-    let out = this.backend.matmul(x, wT);
-    if (bias) out = this.backend.add(out, bias);
-    return out;
+  /**
+   * Apply 1D conv using weight stored as [C_out, C_in, kernel_size] or [C_out, C_in].
+   * For pointwise (kernel_size=1), this is equivalent to a linear layer.
+   */
+  private conv1d(x: TensorHandle, weight: TensorHandle, bias: TensorHandle | null): TensorHandle {
+    const wShape = this.backend.getShape(weight);
+
+    if (wShape.length === 3 && wShape[2] === 1) {
+      // [C_out, C_in, 1] -> treat as linear [C_out, C_in]
+      const w2d = this.backend.reshape(weight, [wShape[0], wShape[1]]);
+      const wT = this.backend.transpose(w2d, [1, 0]);
+      let out = this.backend.matmul(x, wT);
+      if (bias) out = this.backend.add(out, bias);
+      return out;
+    } else if (wShape.length === 2) {
+      // [C_out, C_in] -> linear
+      const wT = this.backend.transpose(weight, [1, 0]);
+      let out = this.backend.matmul(x, wT);
+      if (bias) out = this.backend.add(out, bias);
+      return out;
+    }
+
+    // General conv1d: [C_out, C_in, K] -> need tfjs format [K, C_in, C_out]
+    const wTf = this.backend.transpose(weight, [2, 1, 0]);
+    const padding = Math.floor((wShape[2] as number) / 2);
+    return this.backend.conv1d(x, wTf, 1, padding, bias ?? undefined);
   }
 
   private depthwiseConv(x: TensorHandle, padding: number): TensorHandle {
-    // NeMo stores depthwise conv weight as [channels, 1, kernel_size]
-    // We need [kernel_size, channels, 1] for depthwiseConv1d
+    // NeMo: [channels, 1, kernel_size] -> need [kernel_size, channels, 1]
     const wShape = this.backend.getShape(this.depthwiseWeight);
     let w: TensorHandle;
 
     if (wShape.length === 3) {
-      // [channels, 1, kernel_size] -> [kernel_size, channels, 1]
       w = this.backend.transpose(this.depthwiseWeight, [2, 0, 1]);
     } else {
       w = this.depthwiseWeight;
     }
 
     let h = this.backend.depthwiseConv1d(x, w, 1, padding);
-
     if (this.depthwiseBias) {
       h = this.backend.add(h, this.depthwiseBias);
     }
-
     return h;
   }
 
@@ -152,11 +163,9 @@ export class ConvModule {
     }
 
     let h = this.backend.depthwiseConv1d(x, w, 1, 0);
-
     if (this.depthwiseBias) {
       h = this.backend.add(h, this.depthwiseBias);
     }
-
     return h;
   }
 }

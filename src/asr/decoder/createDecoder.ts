@@ -17,13 +17,11 @@ export function createDecoder(
   const predNet = new PredictionNetwork(backend, weights.prediction, config.predHidden);
 
   if (config.decoderType === 'tdt') {
-    const jointNet = new TDTJointNetwork(backend, weights.joint);
-    return new TDTGreedyDecoder(
-      backend,
-      predNet,
-      jointNet,
-      config.tdtDurations ?? [0, 1, 2, 3, 4],
+    const durations = config.tdtDurations ?? [0, 1, 2, 3, 4];
+    const jointNet = new TDTJointNetwork(
+      backend, weights.joint, config.vocabSize, durations.length
     );
+    return new TDTGreedyDecoder(backend, predNet, jointNet, durations);
   }
 
   const jointNet = new RNNTJointNetwork(backend, weights.joint);

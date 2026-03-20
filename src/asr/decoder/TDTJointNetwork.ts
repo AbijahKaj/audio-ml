@@ -4,18 +4,25 @@ import type { JointNetworkWeights } from '../model/WeightMapper';
 import { JointNetwork } from './JointNetwork';
 import { Linear } from '../encoder/Linear';
 
+/**
+ * TDT joint network. The output projection produces [vocab_size + num_durations]
+ * logits in a single linear layer. We split them into token and duration logits.
+ */
 export class TDTJointNetwork extends JointNetwork {
-  private tokenProj: Linear;
-  private durationProj: Linear;
+  private outputProj: Linear;
+  private vocabSize: number;
+  private numDurations: number;
 
-  constructor(backend: ComputeBackend, weights: JointNetworkWeights) {
+  constructor(
+    backend: ComputeBackend,
+    weights: JointNetworkWeights,
+    vocabSize: number,
+    numDurations: number,
+  ) {
     super(backend, weights);
-    this.tokenProj = new Linear(backend, weights.outputProj);
-
-    if (!weights.durationProj) {
-      throw new Error('TDT joint network requires duration projection weights');
-    }
-    this.durationProj = new Linear(backend, weights.durationProj);
+    this.outputProj = new Linear(backend, weights.outputProj);
+    this.vocabSize = vocabSize;
+    this.numDurations = numDurations;
   }
 
   forward(
@@ -23,9 +30,15 @@ export class TDTJointNetwork extends JointNetwork {
     predictionOut: TensorHandle
   ): { tokenLogits: TensorHandle; durationLogits: TensorHandle } {
     const joint = this.computeJoint(encoderFrame, predictionOut);
-    const tokenLogits = this.tokenProj.forward(joint);
-    const durationLogits = this.durationProj.forward(joint);
+    const combinedLogits = this.outputProj.forward(joint);
     this.backend.dispose(joint);
+
+    // Split into token logits and duration logits
+    const [tokenLogits, durationLogits] = this.backend.split(
+      combinedLogits, [this.vocabSize, this.numDurations], -1
+    );
+    this.backend.dispose(combinedLogits);
+
     return { tokenLogits, durationLogits };
   }
 }

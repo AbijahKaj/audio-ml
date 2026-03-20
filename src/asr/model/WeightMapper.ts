@@ -23,13 +23,15 @@ export interface AttentionWeights {
   keyProj: LinearWeights;
   valueProj: LinearWeights;
   outProj: LinearWeights;
-  posBias: TensorHandle | null;
+  posBiasU: TensorHandle;
+  posBiasV: TensorHandle;
   posProj: LinearWeights | null;
 }
 
 export interface ConvModuleWeights {
   norm: LayerNormWeights;
-  pointwise1: LinearWeights;
+  pointwise1Weight: TensorHandle;
+  pointwise1Bias: TensorHandle | null;
   depthwiseWeight: TensorHandle;
   depthwiseBias: TensorHandle | null;
   batchNorm: {
@@ -38,7 +40,8 @@ export interface ConvModuleWeights {
     runningMean: TensorHandle;
     runningVar: TensorHandle;
   };
-  pointwise2: LinearWeights;
+  pointwise2Weight: TensorHandle;
+  pointwise2Bias: TensorHandle | null;
 }
 
 export interface ConformerBlockWeights {
@@ -50,10 +53,8 @@ export interface ConformerBlockWeights {
 }
 
 export interface SubsamplingWeights {
-  conv1Weight: TensorHandle;
-  conv1Bias: TensorHandle;
-  conv2Weight: TensorHandle;
-  conv2Bias: TensorHandle;
+  allConvWeights: TensorHandle[];
+  allConvBiases: TensorHandle[];
   outWeight: TensorHandle;
   outBias: TensorHandle;
 }
@@ -70,14 +71,13 @@ export interface PredictionNetworkWeights {
   lstmWeightsHH: TensorHandle[];
   lstmBiasIH: TensorHandle[];
   lstmBiasHH: TensorHandle[];
-  outputProj: LinearWeights;
+  outputProj: LinearWeights | null;
 }
 
 export interface JointNetworkWeights {
   encoderProj: LinearWeights;
   predictionProj: LinearWeights;
   outputProj: LinearWeights;
-  durationProj?: LinearWeights;
 }
 
 export interface DecoderWeights {
@@ -115,6 +115,15 @@ export function mapWeights(
     };
   }
 
+  function tryGetLinear(prefix: string): LinearWeights | null {
+    const w = tryGet(`${prefix}.weight`);
+    if (!w) return null;
+    return {
+      weight: w,
+      bias: tryGet(`${prefix}.bias`),
+    };
+  }
+
   function getLayerNorm(prefix: string): LayerNormWeights {
     return {
       weight: get(`${prefix}.weight`),
@@ -122,23 +131,43 @@ export function mapWeights(
     };
   }
 
+  // === Subsampling ===
+  // FastConformer dw_striding: multiple conv layers with varying indices
+  const allConvWeights: TensorHandle[] = [];
+  const allConvBiases: TensorHandle[] = [];
+  for (let idx = 0; idx < 10; idx++) {
+    const w = tryGet(`encoder.pre_encode.conv.${idx}.weight`);
+    if (w) {
+      allConvWeights.push(w);
+      const b = tryGet(`encoder.pre_encode.conv.${idx}.bias`);
+      allConvBiases.push(b!);
+    }
+  }
+
+  // Output projection (may be `out.weight` or `out.0.weight`)
+  let outWeight = tryGet('encoder.pre_encode.out.weight');
+  let outBias = tryGet('encoder.pre_encode.out.bias');
+  if (!outWeight) {
+    outWeight = get('encoder.pre_encode.out.0.weight');
+    outBias = tryGet('encoder.pre_encode.out.0.bias');
+  }
+
   const subsampling: SubsamplingWeights = {
-    conv1Weight: get('encoder.pre_encode.conv.0.weight'),
-    conv1Bias: get('encoder.pre_encode.conv.0.bias'),
-    conv2Weight: get('encoder.pre_encode.conv.2.weight'),
-    conv2Bias: get('encoder.pre_encode.conv.2.bias'),
-    outWeight: get('encoder.pre_encode.out.0.weight'),
-    outBias: get('encoder.pre_encode.out.0.bias'),
+    allConvWeights,
+    allConvBiases,
+    outWeight: outWeight!,
+    outBias: outBias!,
   };
 
+  // === Encoder layers ===
   const layers: ConformerBlockWeights[] = [];
   for (let i = 0; i < config.encoderLayers; i++) {
     const prefix = `encoder.layers.${i}`;
 
     const ffn1: FeedForwardWeights = {
       norm: getLayerNorm(`${prefix}.norm_feed_forward1`),
-      linear1: getLinear(`${prefix}.fc1`),
-      linear2: getLinear(`${prefix}.fc2`),
+      linear1: getLinear(`${prefix}.feed_forward1.linear1`),
+      linear2: getLinear(`${prefix}.feed_forward1.linear2`),
     };
 
     const attn: AttentionWeights = {
@@ -147,53 +176,71 @@ export function mapWeights(
       keyProj: getLinear(`${prefix}.self_attn.linear_k`),
       valueProj: getLinear(`${prefix}.self_attn.linear_v`),
       outProj: getLinear(`${prefix}.self_attn.linear_out`),
-      posBias: tryGet(`${prefix}.self_attn.pos_bias_u`) ?? tryGet(`${prefix}.self_attn.pos_bias`),
-      posProj: tryGet(`${prefix}.self_attn.linear_pos.weight`)
-        ? getLinear(`${prefix}.self_attn.linear_pos`)
-        : null,
+      posBiasU: get(`${prefix}.self_attn.pos_bias_u`),
+      posBiasV: get(`${prefix}.self_attn.pos_bias_v`),
+      posProj: tryGetLinear(`${prefix}.self_attn.linear_pos`),
     };
+
+    // num_batches_tracked is a scalar tracking counter, not a model weight
+    tryGet(`${prefix}.conv.batch_norm.num_batches_tracked`);
 
     const conv: ConvModuleWeights = {
       norm: getLayerNorm(`${prefix}.norm_conv`),
-      pointwise1: getLinear(`${prefix}.conv_module.pointwise_conv1`),
-      depthwiseWeight: get(`${prefix}.conv_module.depthwise_conv.weight`),
-      depthwiseBias: tryGet(`${prefix}.conv_module.depthwise_conv.bias`),
+      pointwise1Weight: get(`${prefix}.conv.pointwise_conv1.weight`),
+      pointwise1Bias: tryGet(`${prefix}.conv.pointwise_conv1.bias`),
+      depthwiseWeight: get(`${prefix}.conv.depthwise_conv.weight`),
+      depthwiseBias: tryGet(`${prefix}.conv.depthwise_conv.bias`),
       batchNorm: {
-        weight: get(`${prefix}.conv_module.batch_norm.weight`),
-        bias: get(`${prefix}.conv_module.batch_norm.bias`),
-        runningMean: get(`${prefix}.conv_module.batch_norm.running_mean`),
-        runningVar: get(`${prefix}.conv_module.batch_norm.running_var`),
+        weight: get(`${prefix}.conv.batch_norm.weight`),
+        bias: get(`${prefix}.conv.batch_norm.bias`),
+        runningMean: get(`${prefix}.conv.batch_norm.running_mean`),
+        runningVar: get(`${prefix}.conv.batch_norm.running_var`),
       },
-      pointwise2: getLinear(`${prefix}.conv_module.pointwise_conv2`),
+      pointwise2Weight: get(`${prefix}.conv.pointwise_conv2.weight`),
+      pointwise2Bias: tryGet(`${prefix}.conv.pointwise_conv2.bias`),
     };
 
     const ffn2: FeedForwardWeights = {
       norm: getLayerNorm(`${prefix}.norm_feed_forward2`),
-      linear1: getLinear(`${prefix}.fc3`),
-      linear2: getLinear(`${prefix}.fc4`),
+      linear1: getLinear(`${prefix}.feed_forward2.linear1`),
+      linear2: getLinear(`${prefix}.feed_forward2.linear2`),
     };
 
     const finalNorm = getLayerNorm(`${prefix}.norm_out`);
-
     layers.push({ ffn1, attn, conv, ffn2, finalNorm });
   }
 
   const encoderFinalNorm: LayerNormWeights | null =
-    tryGet('encoder.norm.weight')
-      ? getLayerNorm('encoder.norm')
-      : null;
+    tryGet('encoder.norm.weight') ? getLayerNorm('encoder.norm') : null;
 
+  // === Prediction network ===
   const predictionLayers = config.predNumLayers;
   const lstmWeightsIH: TensorHandle[] = [];
   const lstmWeightsHH: TensorHandle[] = [];
   const lstmBiasIH: TensorHandle[] = [];
   const lstmBiasHH: TensorHandle[] = [];
   for (let l = 0; l < predictionLayers; l++) {
-    lstmWeightsIH.push(get(`decoder.prediction.lstm.weight_ih_l${l}`));
-    lstmWeightsHH.push(get(`decoder.prediction.lstm.weight_hh_l${l}`));
-    lstmBiasIH.push(get(`decoder.prediction.lstm.bias_ih_l${l}`));
-    lstmBiasHH.push(get(`decoder.prediction.lstm.bias_hh_l${l}`));
+    // Try both naming conventions
+    let wih = tryGet(`decoder.prediction.dec_rnn.lstm.weight_ih_l${l}`);
+    if (!wih) wih = get(`decoder.prediction.lstm.weight_ih_l${l}`);
+    lstmWeightsIH.push(wih);
+
+    let whh = tryGet(`decoder.prediction.dec_rnn.lstm.weight_hh_l${l}`);
+    if (!whh) whh = get(`decoder.prediction.lstm.weight_hh_l${l}`);
+    lstmWeightsHH.push(whh);
+
+    let bih = tryGet(`decoder.prediction.dec_rnn.lstm.bias_ih_l${l}`);
+    if (!bih) bih = get(`decoder.prediction.lstm.bias_ih_l${l}`);
+    lstmBiasIH.push(bih);
+
+    let bhh = tryGet(`decoder.prediction.dec_rnn.lstm.bias_hh_l${l}`);
+    if (!bhh) bhh = get(`decoder.prediction.lstm.bias_hh_l${l}`);
+    lstmBiasHH.push(bhh);
   }
+
+  // Output projection may not exist in all models
+  let predOutputProj = tryGetLinear('decoder.prediction.dec_rnn_layers.0');
+  if (!predOutputProj) predOutputProj = tryGetLinear('decoder.prediction.dec_rnn.output_proj');
 
   const prediction: PredictionNetworkWeights = {
     embedding: get('decoder.prediction.embed.weight'),
@@ -201,19 +248,35 @@ export function mapWeights(
     lstmWeightsHH,
     lstmBiasIH,
     lstmBiasHH,
-    outputProj: getLinear('decoder.prediction.dec_rnn_layers.0'),
+    outputProj: predOutputProj,
   };
+
+  // === Joint network ===
+  // Try NeMo naming conventions
+  let encProj = tryGetLinear('joint.enc');
+  if (!encProj) encProj = tryGetLinear('joint.joint_net.0');
+  if (!encProj) throw new Error('Missing joint encoder projection weights');
+
+  let predProj = tryGetLinear('joint.pred');
+  if (!predProj) predProj = tryGetLinear('joint.pred_net.0');
+  if (!predProj) throw new Error('Missing joint prediction projection weights');
+
+  const outputProj = getLinear('joint.joint_net.2');
 
   const joint: JointNetworkWeights = {
-    encoderProj: getLinear('joint.joint_net.0'),
-    predictionProj: getLinear('joint.pred_net.0'),
-    outputProj: getLinear('joint.joint_net.2'),
+    encoderProj: encProj,
+    predictionProj: predProj,
+    outputProj,
   };
 
-  if (config.decoderType === 'tdt') {
-    joint.durationProj = tryGet('joint.duration_net.weight')
-      ? getLinear('joint.duration_net')
-      : undefined;
+  // Mark known-skippable keys as consumed
+  tryGet('preprocessor.featurizer.fb');
+  tryGet('preprocessor.featurizer.window');
+  // CTC decoder (hybrid models)
+  for (const key of weights.keys()) {
+    if (key.startsWith('ctc_decoder.')) {
+      consumed.add(key);
+    }
   }
 
   const unconsumed = [...weights.keys()].filter(k => !consumed.has(k) && k !== '__metadata__');
@@ -222,14 +285,7 @@ export function mapWeights(
   }
 
   return {
-    encoder: {
-      subsampling,
-      layers,
-      finalNorm: encoderFinalNorm,
-    },
-    decoder: {
-      prediction,
-      joint,
-    },
+    encoder: { subsampling, layers, finalNorm: encoderFinalNorm },
+    decoder: { prediction, joint },
   };
 }

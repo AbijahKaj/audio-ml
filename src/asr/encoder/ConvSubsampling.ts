@@ -1,76 +1,100 @@
+import * as tf from '@tensorflow/tfjs';
 import type { ComputeBackend } from '../compute/Backend';
 import type { TensorHandle } from '../compute/types';
 import type { SubsamplingWeights } from '../model/WeightMapper';
 import type { FastConformerConfig } from '../model/ModelConfig';
 
 /**
- * Conv2D subsampling for FastConformer.
- * Two stride-2 Conv2D layers reduce time by 4x, plus one more stride-2 to get 8x total.
- * Input: [B, T, mel_bands] -> Output: [B, T/8, d_model]
- *
- * NeMo FastConformer uses "dw_striding" subsampling:
- * - Conv2D (channels, 3x3, stride 2) -> ReLU
- * - Conv2D (channels, 3x3, stride 2) -> ReLU
- * - Linear projection to d_model
- * This gives 4x time downsampling. The 8x comes from an extra stride in subsampling
- * or through pooling at specific layers.
+ * FastConformer dw_striding subsampling.
+ * Conv layers from the actual checkpoint:
+ *   conv.0: [256, 1, 3, 3]   — regular Conv2D (1->256, stride=2)
+ *   conv.2: [256, 1, 3, 3]   — depthwise Conv2D (groups=256, stride=2)
+ *   conv.3: [256, 256, 1, 1] — pointwise Conv2D (256->256, stride=1)
+ *   conv.5: [256, 1, 3, 3]   — depthwise Conv2D (groups=256, stride=2)
+ *   conv.6: [256, 256, 1, 1] — pointwise Conv2D (256->256, stride=1)
+ *   out:    [512, 2560]       — Linear projection
+ * Total 8x time downsampling.
  */
 export class ConvSubsampling {
   private backend: ComputeBackend;
-  private conv1Weight: TensorHandle;
-  private conv1Bias: TensorHandle;
-  private conv2Weight: TensorHandle;
-  private conv2Bias: TensorHandle;
+  private convWeights: TensorHandle[];
+  private convBiases: TensorHandle[];
   private outWeight: TensorHandle;
   private outBias: TensorHandle;
 
   constructor(backend: ComputeBackend, weights: SubsamplingWeights, _config: FastConformerConfig) {
     this.backend = backend;
-    this.conv1Weight = weights.conv1Weight;
-    this.conv1Bias = weights.conv1Bias;
-    this.conv2Weight = weights.conv2Weight;
-    this.conv2Bias = weights.conv2Bias;
+    this.convWeights = weights.allConvWeights;
+    this.convBiases = weights.allConvBiases;
     this.outWeight = weights.outWeight;
     this.outBias = weights.outBias;
   }
 
   forward(melFeatures: TensorHandle): TensorHandle {
-    return this.backend.tidy(() => {
+    return (tf.tidy as Function)(() => {
       const shape = this.backend.getShape(melFeatures);
       const B = shape[0] as number;
 
-      // [B, T, F] -> [B, T, F, 1] for Conv2D
+      // [B, T, F] -> [B, T, F, 1]
       let x = this.backend.expandDims(melFeatures, 3);
 
-      // Conv2D 1: stride 2x2 (PyTorch stores as [out, in, H, W], tf needs [H, W, in, out])
-      const w1 = this.transposePyTorchConv2d(this.conv1Weight);
-      x = this.backend.conv2d(x, w1, [2, 2], 'valid', this.conv1Bias);
-      x = this.backend.relu(x);
+      for (let i = 0; i < this.convWeights.length; i++) {
+        const w = this.convWeights[i];
+        const b = this.convBiases[i];
+        const wShape = this.backend.getShape(w);
 
-      // Conv2D 2: stride 2x2
-      const w2 = this.transposePyTorchConv2d(this.conv2Weight);
-      x = this.backend.conv2d(x, w2, [2, 2], 'valid', this.conv2Bias);
-      x = this.backend.relu(x);
+        // Determine conv type from weight shape
+        // [out, in, kH, kW] where in=1 and (kH,kW) != (1,1) → depthwise (or first regular conv)
+        // [out, in, 1, 1] → pointwise
+        const isPointwise = wShape[2] === 1 && wShape[3] === 1;
+        const isDepthwise = wShape[1] === 1 && !isPointwise;
 
-      // Flatten spatial dims: [B, T', F', C] -> [B, T', F'*C]
-      const newShape = this.backend.getShape(x);
-      const T2 = newShape[1] as number;
-      const F2 = newShape[2] as number;
-      const C = newShape[3] as number;
+        if (isPointwise) {
+          // Pointwise: [C_out, C_in, 1, 1] → TF [1, 1, C_in, C_out], stride 1
+          const wTf = this.transposePyTorchConv2d(w);
+          x = this.backend.conv2d(x, wTf, [1, 1], 'same', b);
+          x = this.backend.relu(x);
+        } else if (isDepthwise && i > 0) {
+          // Depthwise conv (not first layer): [C, 1, kH, kW]
+          // TF depthwiseConv2d expects [kH, kW, C_in, channel_multiplier]
+          const wDw = tf.transpose(w as tf.Tensor, [2, 3, 0, 1]); // [kH, kW, C, 1]
+          const padH = 1; // for 3x3 kernel
+          const padW = 1;
+          const padded = tf.pad(x as tf.Tensor, [[0, 0], [padH, padH], [padW, padW], [0, 0]]);
+          let result = tf.depthwiseConv2d(
+            padded as tf.Tensor4D,
+            wDw as tf.Tensor4D,
+            [2, 2],
+            'valid'
+          );
+          if (b) {
+            result = tf.add(result, b as tf.Tensor) as tf.Tensor4D;
+          }
+          x = result;
+        } else {
+          // Regular conv (first layer): [C_out, 1, kH, kW] → [kH, kW, 1, C_out]
+          const wTf = this.transposePyTorchConv2d(w);
+          x = this.backend.conv2d(x, wTf, [2, 2], 'valid', b);
+          x = this.backend.relu(x);
+        }
+      }
+
+      // Flatten: [B, T', F', C] -> [B, T', F'*C]
+      const outShape = this.backend.getShape(x);
+      const T2 = outShape[1] as number;
+      const F2 = outShape[2] as number;
+      const C = outShape[3] as number;
       x = this.backend.reshape(x, [B, T2, F2 * C]);
 
       // Linear projection to d_model
-      const wOut = this.backend.transpose(this.outWeight, [1, 0]);
-      x = this.backend.matmul(x, wOut);
+      const wT = this.backend.transpose(this.outWeight, [1, 0]);
+      x = this.backend.matmul(x, wT);
       x = this.backend.add(x, this.outBias);
 
       return x;
     });
   }
 
-  /**
-   * Transpose PyTorch Conv2D weights [out, in, H, W] to TF format [H, W, in, out]
-   */
   private transposePyTorchConv2d(weight: TensorHandle): TensorHandle {
     return this.backend.transpose(weight, [2, 3, 1, 0]);
   }

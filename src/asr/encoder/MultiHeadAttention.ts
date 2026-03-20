@@ -4,6 +4,11 @@ import type { AttentionWeights } from '../model/WeightMapper';
 import { Linear } from './Linear';
 import { RelativePositionalEncoding } from './RelativePositionalEncoding';
 
+/**
+ * Multi-head self-attention with relative positional encoding.
+ * Uses two position biases (pos_bias_u for content and pos_bias_v for position)
+ * per the original Conformer paper.
+ */
 export class MultiHeadAttention {
   private backend: ComputeBackend;
   private numHeads: number;
@@ -15,7 +20,8 @@ export class MultiHeadAttention {
   private kProj: Linear;
   private vProj: Linear;
   private outProj: Linear;
-  private posBias: TensorHandle | null;
+  private posBiasU: TensorHandle;
+  private posBiasV: TensorHandle;
   private posEncoding: RelativePositionalEncoding;
   private posWeight: TensorHandle | null;
 
@@ -35,7 +41,8 @@ export class MultiHeadAttention {
     this.kProj = new Linear(backend, weights.keyProj);
     this.vProj = new Linear(backend, weights.valueProj);
     this.outProj = new Linear(backend, weights.outProj);
-    this.posBias = weights.posBias;
+    this.posBiasU = weights.posBiasU;
+    this.posBiasV = weights.posBiasV;
     this.posEncoding = new RelativePositionalEncoding(backend, dModel);
     this.posWeight = weights.posProj ? weights.posProj.weight : null;
   }
@@ -46,40 +53,39 @@ export class MultiHeadAttention {
       const B = shape[0] as number;
       const T = shape[1] as number;
 
-      let normed = this.backend.layerNorm(x, this.normWeight, this.normBias, 1e-5);
+      const normed = this.backend.layerNorm(x, this.normWeight, this.normBias, 1e-5);
 
-      let q = this.splitHeads(this.qProj.forward(normed), B, T);
+      const q = this.splitHeads(this.qProj.forward(normed), B, T);
       const k = this.splitHeads(this.kProj.forward(normed), B, T);
       const v = this.splitHeads(this.vProj.forward(normed), B, T);
 
-      // Add position bias to query if available (NeMo uses pos_bias_u and pos_bias_v)
-      if (this.posBias) {
-        const bias = this.backend.reshape(this.posBias, [1, this.numHeads, 1, this.headDim]);
-        q = this.backend.add(q, bias);
-      }
-
       const scale = 1.0 / Math.sqrt(this.headDim);
 
-      // Content-based attention: Q * K^T
-      const kT = this.backend.transpose(k, [0, 1, 3, 2]); // [B, heads, d_head, T]
-      let scores = this.backend.scale(this.backend.matmul(q, kT), scale);
+      // pos_bias_u: [heads, d_head] -> [1, heads, 1, d_head]
+      const biasU = this.backend.reshape(this.posBiasU, [1, this.numHeads, 1, this.headDim]);
+      const biasV = this.backend.reshape(this.posBiasV, [1, this.numHeads, 1, this.headDim]);
 
-      // Relative positional encoding scores
+      // Content-based attention: (Q + pos_bias_u) * K^T
+      const qWithBiasU = this.backend.add(q, biasU);
+      const kT = this.backend.transpose(k, [0, 1, 3, 2]);
+      let contentScores = this.backend.matmul(qWithBiasU, kT);
+
+      // Position-based attention: (Q + pos_bias_v) * pos_encoding^T
       if (this.posWeight) {
+        const qWithBiasV = this.backend.add(q, biasV);
         const posEnc = this.posEncoding.forward(T);
         const relScores = this.posEncoding.computeRelativeScores(
-          q, posEnc, this.posWeight, this.numHeads, this.headDim
+          qWithBiasV, posEnc, this.posWeight, this.numHeads, this.headDim
         );
-        const scaledRelScores = this.backend.scale(relScores, scale);
-        scores = this.backend.add(scores, scaledRelScores);
+        contentScores = this.backend.add(contentScores, relScores);
       }
 
-      // Apply mask if provided
+      let scores = this.backend.scale(contentScores, scale);
+
       if (mask) {
         const negInf = this.backend.scalarTensor(-1e9);
-        const ones = this.backend.ones(this.backend.getShape(scores));
-        const maskedScores = this.backend.mul(ones, negInf);
-        scores = this.backend.where(mask, scores, maskedScores);
+        const maskFill = this.backend.mul(this.backend.ones(this.backend.getShape(scores)), negInf);
+        scores = this.backend.where(mask, scores, maskFill);
       }
 
       const attnWeights = this.backend.softmax(scores, -1);
@@ -102,11 +108,10 @@ export class MultiHeadAttention {
 
     const normed = this.backend.layerNorm(x, this.normWeight, this.normBias, 1e-5);
 
-    let q = this.splitHeads(this.qProj.forward(normed), B, T);
+    const q = this.splitHeads(this.qProj.forward(normed), B, T);
     let k = this.splitHeads(this.kProj.forward(normed), B, T);
     let v = this.splitHeads(this.vProj.forward(normed), B, T);
 
-    // Concatenate with cache
     if (cachedK && cachedV) {
       k = this.backend.concat([cachedK, k], 2);
       v = this.backend.concat([cachedV, v], 2);
@@ -115,37 +120,36 @@ export class MultiHeadAttention {
     const newK = this.backend.clone(k);
     const newV = this.backend.clone(v);
 
-    if (this.posBias) {
-      const bias = this.backend.reshape(this.posBias, [1, this.numHeads, 1, this.headDim]);
-      q = this.backend.add(q, bias);
-    }
-
     const scale = 1.0 / Math.sqrt(this.headDim);
+    const biasU = this.backend.reshape(this.posBiasU, [1, this.numHeads, 1, this.headDim]);
+    const qWithBiasU = this.backend.add(q, biasU);
     const kT = this.backend.transpose(k, [0, 1, 3, 2]);
-    let scores = this.backend.scale(this.backend.matmul(q, kT), scale);
+    let scores = this.backend.matmul(qWithBiasU, kT);
 
     const totalT = this.backend.getShape(k)[2] as number;
     if (this.posWeight) {
+      const biasV = this.backend.reshape(this.posBiasV, [1, this.numHeads, 1, this.headDim]);
+      const qWithBiasV = this.backend.add(q, biasV);
       const posEnc = this.posEncoding.forward(totalT);
       const relScores = this.posEncoding.computeRelativeScores(
-        q, posEnc, this.posWeight, this.numHeads, this.headDim
+        qWithBiasV, posEnc, this.posWeight, this.numHeads, this.headDim
       );
-      const scaledRelScores = this.backend.scale(relScores, scale);
-      // Align relative scores to full K/V length
-      const relShape = this.backend.getShape(scaledRelScores);
+      const relShape = this.backend.getShape(relScores);
       const relT = relShape[3] as number;
       if (relT !== totalT) {
-        const sliced = this.backend.slice(scaledRelScores, [0, 0, 0, relT - totalT], [B, this.numHeads, T, totalT]);
+        const sliced = this.backend.slice(relScores, [0, 0, 0, relT - totalT], [B, this.numHeads, T, totalT]);
         scores = this.backend.add(scores, sliced);
       } else {
-        scores = this.backend.add(scores, scaledRelScores);
+        scores = this.backend.add(scores, relScores);
       }
     }
 
+    scores = this.backend.scale(scores, scale);
+
     if (mask) {
       const negInf = this.backend.scalarTensor(-1e9);
-      const maskOnes = this.backend.mul(this.backend.ones(this.backend.getShape(scores)), negInf);
-      scores = this.backend.where(mask, scores, maskOnes);
+      const maskFill = this.backend.mul(this.backend.ones(this.backend.getShape(scores)), negInf);
+      scores = this.backend.where(mask, scores, maskFill);
     }
 
     const attnWeights = this.backend.softmax(scores, -1);
@@ -158,11 +162,11 @@ export class MultiHeadAttention {
 
   private splitHeads(x: TensorHandle, B: number, T: number): TensorHandle {
     const reshaped = this.backend.reshape(x, [B, T, this.numHeads, this.headDim]);
-    return this.backend.transpose(reshaped, [0, 2, 1, 3]); // [B, heads, T, d_head]
+    return this.backend.transpose(reshaped, [0, 2, 1, 3]);
   }
 
   private mergeHeads(x: TensorHandle, B: number, T: number): TensorHandle {
-    const transposed = this.backend.transpose(x, [0, 2, 1, 3]); // [B, T, heads, d_head]
+    const transposed = this.backend.transpose(x, [0, 2, 1, 3]);
     return this.backend.reshape(transposed, [B, T, this.dModel]);
   }
 }
