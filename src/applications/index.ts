@@ -15,7 +15,7 @@
  */
 
 // Base classes and types
-export { BaseApplication, type ApplicationConfig } from './base/BaseApplication';
+export { BaseApplication, type ApplicationConfig } from './base/BaseApplication.js';
 export type {
   VADResult,
   PitchResult,
@@ -23,13 +23,20 @@ export type {
   BeepDetectionResult,
   DenoisedFrame,
   FeatureVector
-} from './base/types';
+} from './base/types.js';
 
 // Speech applications
-export { VAD, type VADConfig } from './speech/VAD';
+export { VAD, type VADConfig } from './speech/VAD.js';
+export {
+  SpeechRecognizer,
+  type SpeechRecognizerConfig,
+  type ASRResult,
+  type ASRPartialResult,
+  type ASRFinalResult,
+} from './speech/SpeechRecognizer.js';
 
 // Detection applications
-export { VoicemailBeepDetector, type VoicemailBeepDetectorConfig, type FrequencyRange } from './detection/VoicemailBeepDetector';
+export { VoicemailBeepDetector, type VoicemailBeepDetectorConfig, type FrequencyRange } from './detection/VoicemailBeepDetector.js';
 
 // Processing applications
-export { AudioDenoiser, type AudioDenoiserConfig } from './processing/AudioDenoiser';
+export { AudioDenoiser, type AudioDenoiserConfig } from './processing/AudioDenoiser.js';

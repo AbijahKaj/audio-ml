@@ -3,6 +3,7 @@ import { createAnalyzersDemo } from './pages/AnalyzersDemo';
 import { createVADDemo } from './pages/VADDemo';
 import { createAudioDenoiserDemo } from './pages/AudioDenoiserDemo';
 import { createBeepDetectorDemo } from './pages/BeepDetectorDemo';
+import { createSpeechRecognizerDemo } from './pages/SpeechRecognizerDemo';
 
 let currentCleanup: (() => void) | null = null;
 const router = new Router();
@@ -12,6 +13,7 @@ const pages: { page: DemoPage; label: string }[] = [
   { page: 'vad', label: 'VAD' },
   { page: 'denoiser', label: 'Denoiser' },
   { page: 'beep-detector', label: 'Voicemail Beep Detector' },
+  { page: 'asr', label: 'Speech Recognizer (ASR)' },
 ];
 
 // Wait for DOM to be ready
@@ -100,6 +102,9 @@ function loadPage(page: DemoPage, container: HTMLElement): void {
       break;
     case 'beep-detector':
       currentCleanup = createBeepDetectorDemo(container);
+      break;
+    case 'asr':
+      currentCleanup = createSpeechRecognizerDemo(container);
       break;
     default:
       currentCleanup = createAnalyzersDemo(container);
