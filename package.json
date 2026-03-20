@@ -14,6 +14,10 @@
       "import": "./dist/applications/index.js",
       "types": "./dist/applications/index.d.ts"
     },
+    "./asr": {
+      "import": "./dist/asr/index.js",
+      "types": "./dist/asr/index.d.ts"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -23,6 +27,7 @@
   ],
   "scripts": {
     "build:package": "tsc",
+    "test": "vitest run",
     "prepublishOnly": "yarn build:package"
   },
   "keywords": [
@@ -46,9 +51,13 @@
     "url": "git+https://github.com/AbijahKaj/audio-ml.git"
   },
   "devDependencies": {
-    "typescript": "~5.9.3"
+    "@types/node": "^25.5.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
     "fft.js": "^4.0.4"
   },
   "engines": {
