@@ -126,10 +126,7 @@ export class SpeechRecognizer extends BaseApplication {
     }
 
     if (endpointState === 'speech-end' && this.utteranceActive) {
-      const remaining = this.chunkedInference.flush();
-      if (remaining) {
-        this.utteranceAudio.push(remaining);
-      }
+      this.chunkedInference.flush();
       this.queueDecode(true);
     }
 

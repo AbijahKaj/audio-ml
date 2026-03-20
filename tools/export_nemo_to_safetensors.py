@@ -45,8 +45,8 @@ def main() -> None:
     if decoder_type == "tdt":
         durations = getattr(model.cfg.model_defaults, "tdt_durations", None)
         if durations is not None:
-          config["tdt_durations"] = list(durations)
-          config["tdt_num_durations"] = len(durations)
+            config["tdt_durations"] = list(durations)
+            config["tdt_num_durations"] = len(durations)
 
     with (output_dir / "model_config.json").open("w", encoding="utf-8") as handle:
         json.dump(config, handle, indent=2)
