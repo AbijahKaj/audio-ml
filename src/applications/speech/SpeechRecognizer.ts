@@ -99,6 +99,7 @@ export class SpeechRecognizer extends BaseApplication {
   private streamingPartialIntervalSamples = 6400;
   private bufferedStreamingAudio: Float32Array[] = [];
   private bufferedStreamingSamples = 0;
+  private samplesSinceLastDecode = 0;
   private lastPartialText = '';
   private processingQueue: Promise<void> = Promise.resolve();
   private tokenBuffer: number[] = [];
@@ -226,6 +227,7 @@ export class SpeechRecognizer extends BaseApplication {
     this.lastPartialText = '';
     this.bufferedStreamingAudio = [];
     this.bufferedStreamingSamples = 0;
+    this.samplesSinceLastDecode = 0;
     this.chunkedInference?.reset();
     this.endpointer?.reset();
     this.resampler?.reset();
@@ -296,8 +298,9 @@ export class SpeechRecognizer extends BaseApplication {
 
     this.bufferedStreamingAudio.push(resampled);
     this.bufferedStreamingSamples += resampled.length;
+    this.samplesSinceLastDecode += resampled.length;
     const endpoint = this.endpointer.processFrame(resampled);
-    const shouldDecode = this.bufferedStreamingSamples >= this.streamingPartialIntervalSamples
+    const shouldDecode = this.samplesSinceLastDecode >= this.streamingPartialIntervalSamples
       || endpoint === 'speech-end';
     if (!shouldDecode) {
       return;
@@ -317,12 +320,14 @@ export class SpeechRecognizer extends BaseApplication {
       this.emit('final', finalResult);
       this.bufferedStreamingAudio = [];
       this.bufferedStreamingSamples = 0;
+      this.samplesSinceLastDecode = 0;
       this.lastPartialText = '';
       this.endpointer.reset();
       this.resampler.reset();
       return;
     }
 
+    this.samplesSinceLastDecode = 0;
     if (text !== this.lastPartialText) {
       this.lastPartialText = text;
       const partialResult: StreamingASRResult = {
