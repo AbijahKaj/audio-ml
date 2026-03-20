@@ -239,9 +239,23 @@ function mapEncoder(lookup: WeightLookup, config: FastConformerConfig): EncoderW
   return {
     subsampling: {
       conv1: mapLinear(lookup, ['encoder.pre_encode.conv.0', 'encoder.pre_encode.conv1']),
-      conv2: mapLinear(lookup, ['encoder.pre_encode.conv.2', 'encoder.pre_encode.conv2']),
-      conv3: lookup.maybe(['encoder.pre_encode.conv.4.weight', 'encoder.pre_encode.conv3.weight'])
-        ? mapLinear(lookup, ['encoder.pre_encode.conv.4', 'encoder.pre_encode.conv3'])
+      conv2: mapLinear(lookup, [
+        'encoder.pre_encode.conv.3',
+        'encoder.pre_encode.conv.2',
+        'encoder.pre_encode.conv2',
+      ]),
+      conv3: lookup.maybe([
+        'encoder.pre_encode.conv.6.weight',
+        'encoder.pre_encode.conv.5.weight',
+        'encoder.pre_encode.conv.4.weight',
+        'encoder.pre_encode.conv3.weight',
+      ])
+        ? mapLinear(lookup, [
+            'encoder.pre_encode.conv.6',
+            'encoder.pre_encode.conv.5',
+            'encoder.pre_encode.conv.4',
+            'encoder.pre_encode.conv3',
+          ])
         : undefined,
       out: mapLinear(lookup, ['encoder.pre_encode.out.0', 'encoder.pre_encode.out']),
     },

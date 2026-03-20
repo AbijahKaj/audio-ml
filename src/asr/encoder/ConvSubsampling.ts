@@ -25,7 +25,7 @@ export class ConvSubsampling {
     x = scope.track(this.backend.relu(x));
 
     if (this.weights.conv3) {
-      x = scope.track(this.applyConv2d(x, this.weights.conv3.weight, this.weights.conv3.bias, [2, 1]));
+      x = scope.track(this.applyConv2d(x, this.weights.conv3.weight, this.weights.conv3.bias, [2, 2]));
       x = scope.track(this.backend.relu(x));
     }
 
