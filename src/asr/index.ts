@@ -27,6 +27,13 @@ export type { ComputeBackend } from './compute/Backend';
 export { ComputeScope } from './compute/ComputeScope';
 export type { TensorHandle, Shape, Dtype } from './compute/types';
 
+// Streaming
+export { ChunkedInference, type StreamingResult, type ChunkedInferenceConfig }
+  from './streaming/ChunkedInference';
+export { CacheManager, type StreamingCache } from './streaming/CacheManager';
+export { Endpointer, type EndpointerConfig, type EndpointEvent }
+  from './streaming/Endpointer';
+
 // Model
 export { loadSafeTensors, loadSafeTensorsFromBuffer } from './model/SafeTensorsLoader';
 export { parseModelConfig, type FastConformerConfig, type DecoderType } from './model/ModelConfig';

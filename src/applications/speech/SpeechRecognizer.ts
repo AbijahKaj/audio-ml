@@ -9,6 +9,8 @@ import { SentencePieceDecoder } from '../../asr/text/SentencePieceDecoder';
 import { parseModelConfig, type FastConformerConfig } from '../../asr/model/ModelConfig';
 import { loadSafeTensors } from '../../asr/model/SafeTensorsLoader';
 import { mapWeights } from '../../asr/model/WeightMapper';
+import { ChunkedInference, type StreamingResult } from '../../asr/streaming/ChunkedInference';
+import { Endpointer } from '../../asr/streaming/Endpointer';
 
 export interface SpeechRecognizerConfig extends ApplicationConfig {
   modelPath: string;
@@ -16,6 +18,10 @@ export interface SpeechRecognizerConfig extends ApplicationConfig {
   vocabPath: string;
   backend?: 'wasm' | 'webgpu' | 'webgl' | 'cpu';
   inputSampleRate?: number;
+  streaming?: boolean;
+  chunkSizeMs?: number;
+  maxContextFrames?: number;
+  silenceTimeoutMs?: number;
 }
 
 export interface ASRResult {
@@ -42,6 +48,13 @@ export class SpeechRecognizer extends BaseApplication {
   private audioBuffer: Float32Array[] = [];
   private isLoaded: boolean = false;
 
+  private chunkedInference: ChunkedInference | null = null;
+  private endpointer: Endpointer | null = null;
+  private streamingEnabled: boolean;
+  private chunkSizeMs: number;
+  private maxContextFrames: number;
+  private silenceTimeoutMs: number;
+
   private modelPath: string;
   private configPath: string;
   private vocabPath: string;
@@ -55,6 +68,10 @@ export class SpeechRecognizer extends BaseApplication {
     this.vocabPath = config.vocabPath;
     this.backendType = config.backend ?? 'cpu';
     this.inputSampleRate = config.inputSampleRate ?? config.sampleRate;
+    this.streamingEnabled = config.streaming ?? false;
+    this.chunkSizeMs = config.chunkSizeMs ?? 160;
+    this.maxContextFrames = config.maxContextFrames ?? 70;
+    this.silenceTimeoutMs = config.silenceTimeoutMs ?? 800;
   }
 
   async load(): Promise<void> {
@@ -79,6 +96,7 @@ export class SpeechRecognizer extends BaseApplication {
       this.resampler = new Resampler(this.inputSampleRate, this.config.sampleRate);
     }
 
+    this.initStreaming();
     this.isLoaded = true;
     this.emit('ready', { decoderType: this.config.decoderType });
   }
@@ -106,14 +124,80 @@ export class SpeechRecognizer extends BaseApplication {
       this.resampler = new Resampler(this.inputSampleRate, this.config.sampleRate);
     }
 
+    this.initStreaming();
     this.isLoaded = true;
     this.emit('ready', { decoderType: this.config.decoderType });
   }
 
   processFrame(pcm: Float32Array): ASRResult | null {
     if (!this.isLoaded) return null;
+
+    if (this.streamingEnabled && this.chunkedInference && this.endpointer) {
+      const endpointEvent = this.endpointer.processFrame(pcm);
+
+      this.chunkedInference.feedAudio(pcm).then(result => {
+        if (result) {
+          this.emit('partial', {
+            text: result.text,
+            latencyMs: result.latencyMs,
+            decoderType: result.decoderType,
+          });
+        }
+      });
+
+      if (endpointEvent === 'speech-end') {
+        this.chunkedInference.flush().then(result => {
+          const asrResult: ASRResult = {
+            text: result.text,
+            isFinal: true,
+            latencyMs: result.latencyMs,
+            decoderType: result.decoderType,
+            tokenCount: this.chunkedInference!.tokenCount,
+          };
+          this.emit('final', asrResult);
+          this.chunkedInference!.reset();
+        });
+      }
+
+      return null;
+    }
+
     this.audioBuffer.push(pcm);
     return null;
+  }
+
+  async processFrameAsync(pcm: Float32Array): Promise<StreamingResult | null> {
+    if (!this.isLoaded || !this.chunkedInference) return null;
+
+    if (this.endpointer) {
+      this.endpointer.processFrame(pcm);
+    }
+
+    return this.chunkedInference.feedAudio(pcm);
+  }
+
+  async finalizeUtterance(): Promise<ASRResult> {
+    if (!this.chunkedInference) {
+      return {
+        text: '',
+        isFinal: true,
+        latencyMs: 0,
+        decoderType: this.config?.decoderType ?? 'rnnt',
+        tokenCount: 0,
+      };
+    }
+
+    const result = await this.chunkedInference.flush();
+    const asrResult: ASRResult = {
+      text: result.text,
+      isFinal: true,
+      latencyMs: result.latencyMs,
+      decoderType: result.decoderType,
+      tokenCount: this.chunkedInference.tokenCount,
+    };
+
+    this.chunkedInference.reset();
+    return asrResult;
   }
 
   async transcribe(audio: Float32Array): Promise<ASRResult> {
@@ -181,5 +265,34 @@ export class SpeechRecognizer extends BaseApplication {
   reset(): void {
     super.reset();
     this.audioBuffer = [];
+    if (this.chunkedInference) {
+      this.chunkedInference.reset();
+    }
+    if (this.endpointer) {
+      this.endpointer.reset();
+    }
+  }
+
+  private initStreaming(): void {
+    if (!this.streamingEnabled) return;
+
+    this.chunkedInference = new ChunkedInference(
+      this.backend,
+      this.config,
+      this.featurePipeline,
+      this.encoder,
+      this.decoder as any,
+      this.tokenizer,
+      {
+        chunkSizeMs: this.chunkSizeMs,
+        maxContextFrames: this.maxContextFrames,
+        inputSampleRate: this.inputSampleRate,
+      },
+    );
+
+    this.endpointer = new Endpointer({
+      sampleRate: this.inputSampleRate,
+      silenceTimeoutMs: this.silenceTimeoutMs,
+    });
   }
 }
