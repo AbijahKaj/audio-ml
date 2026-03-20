@@ -28,6 +28,7 @@ dist-ssr
 
 # Test model files (large binary)
 test_model/
+exported/
 *.safetensors
 *.ckpt
 *.nemo
