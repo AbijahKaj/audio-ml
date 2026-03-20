@@ -20,7 +20,9 @@ function getGlobalFetch(): FetchLike | undefined {
 }
 
 function toArrayBuffer(source: Uint8Array): ArrayBuffer {
-  return source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+  const copy = new Uint8Array(source.byteLength);
+  copy.set(source);
+  return copy.buffer;
 }
 
 function decodeF16(value: number): number {

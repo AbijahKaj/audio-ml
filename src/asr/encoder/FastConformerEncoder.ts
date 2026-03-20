@@ -17,7 +17,7 @@ export class FastConformerEncoder {
 
   constructor(
     private backend: ComputeBackend,
-    private weights: EncoderWeights,
+    weights: EncoderWeights,
     private config: FastConformerConfig,
   ) {
     this.subsampling = new ConvSubsampling(backend, weights.subsampling, config.subsamplingFactor);
