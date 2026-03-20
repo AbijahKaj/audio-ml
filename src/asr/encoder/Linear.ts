@@ -12,7 +12,16 @@ export class Linear {
   forward(x: TensorHandle): TensorHandle {
     const scope = new ComputeScope();
     const shape = this.backend.getShape(x);
-    const weightT = scope.track(this.backend.transpose(this.weights.weight, [1, 0]));
+    const rawWeight = this.weights.weight;
+    const weightShape = this.backend.getShape(rawWeight);
+    let denseWeight = rawWeight;
+    if (weightShape.length === 3 && weightShape[2] === 1) {
+      denseWeight = scope.track(this.backend.reshape(rawWeight, [weightShape[0], weightShape[1]]));
+    } else if (weightShape.length === 4 && weightShape[2] === 1 && weightShape[3] === 1) {
+      denseWeight = scope.track(this.backend.reshape(rawWeight, [weightShape[0], weightShape[1]]));
+    }
+
+    const weightT = scope.track(this.backend.transpose(denseWeight, [1, 0]));
     let output: TensorHandle;
 
     if (shape.length === 2) {
