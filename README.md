@@ -57,6 +57,28 @@ Higher-level tools built on top of the analyzers. Import from `audio-ml/applicat
 import { VAD, AudioDenoiser, VoicemailBeepDetector } from 'audio-ml/applications';
 ```
 
+### Speech recognition (FastConformer RNNT / TDT)
+
+Experimental on-device ASR using TensorFlow.js and weights exported from NeMo (SafeTensors). See [`plans/fastconformer-asr.md`](plans/fastconformer-asr.md) for the full architecture and export pipeline.
+
+```typescript
+import { SpeechRecognizer } from 'audio-ml/applications';
+// or import internals from 'audio-ml/asr'
+
+const asr = new SpeechRecognizer({
+  sampleRate: 16000,
+  modelUrl: '/models/model.safetensors',
+  configJson: '/models/model_config.json',
+  vocabJson: '/models/vocab.json',
+  backend: 'wasm',
+});
+
+await asr.load();
+const { text, latencyMs, decoderType } = await asr.transcribe(pcmFloat32);
+```
+
+Export checkpoints with `tools/export_nemo_to_safetensors.py` and tokenizer vocab with `tools/export_vocab.py`.
+
 ### Voice Activity Detection (VAD)
 
 Detects speech vs silence by combining RMSE, Zero Crossing Rate, Spectral Flatness, and Spectral Centroid with weighted scoring and temporal smoothing.

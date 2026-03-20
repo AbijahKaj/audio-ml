@@ -1,0 +1,16 @@
+export { SpeechRecognizer, type SpeechRecognizerConfig, type ASRResult } from '../applications/speech/SpeechRecognizer';
+export { FastConformerEncoder } from './encoder/FastConformerEncoder';
+export { RNNTGreedyDecoder } from './decoder/RNNTGreedyDecoder';
+export { TDTGreedyDecoder } from './decoder/TDTGreedyDecoder';
+export { createDecoder } from './decoder/createDecoder';
+export { FeaturePipeline } from './features/FeaturePipeline';
+export { Resampler } from './features/Resampler';
+export { TfjsBackend, type TfjsBackendName } from './compute/TfjsBackend';
+export type { ComputeBackend } from './compute/Backend';
+export { loadSafeTensors, loadSafeTensorsSync } from './model/SafeTensorsLoader';
+export { parseModelConfig, type FastConformerConfig, type DecoderType } from './model/ModelConfig';
+export { mapWeights } from './model/WeightMapper';
+export { SentencePieceDecoder } from './text/SentencePieceDecoder';
+export { CacheManager, type StreamingCache } from './streaming/CacheManager';
+export { ChunkedInference } from './streaming/ChunkedInference';
+export { Endpointer, type EndpointEvent } from './streaming/Endpointer';

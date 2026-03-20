@@ -2,7 +2,7 @@
  * Simple router for demo pages
  */
 
-export type DemoPage = 'analyzers' | 'vad' | 'denoiser' | 'beep-detector';
+export type DemoPage = 'analyzers' | 'vad' | 'denoiser' | 'beep-detector' | 'asr';
 
 export class Router {
   private currentPage: DemoPage = 'analyzers';
@@ -27,7 +27,13 @@ export class Router {
 
   private getPageFromHash(): DemoPage | null {
     const hash = window.location.hash.slice(1);
-    if (hash === 'vad' || hash === 'denoiser' || hash === 'beep-detector' || hash === 'analyzers') {
+    if (
+      hash === 'vad' ||
+      hash === 'denoiser' ||
+      hash === 'beep-detector' ||
+      hash === 'analyzers' ||
+      hash === 'asr'
+    ) {
       return hash as DemoPage;
     }
     return null;
