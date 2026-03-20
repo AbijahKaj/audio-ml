@@ -11,14 +11,14 @@ export interface PredictionStepOutput {
 }
 
 export class PredictionNetwork {
-  private readonly outputProj: Linear;
+  private readonly outputProj?: Linear;
   private readonly hiddenSize: number;
 
   constructor(
     private backend: ComputeBackend,
     private weights: PredictionWeights,
   ) {
-    this.outputProj = new Linear(backend, weights.outputProj);
+    this.outputProj = weights.outputProj ? new Linear(backend, weights.outputProj) : undefined;
     this.hiddenSize = this.backend.getShape(weights.lstmWeightHH)[1];
   }
 
@@ -56,7 +56,7 @@ export class PredictionNetwork {
     const cNew = this.backend.add(cCarry, cInput);
     const tanhC = scope.track(this.backend.tanh(cNew));
     const hNew = this.backend.mul(oGate, tanhC);
-    const output = this.outputProj.forward(hNew);
+    const output = this.outputProj ? this.outputProj.forward(hNew) : hNew;
 
     scope.keep(cNew);
     scope.keep(hNew);

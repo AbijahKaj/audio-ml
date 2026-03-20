@@ -11,8 +11,8 @@ export interface LinearWeights {
 }
 
 export interface BatchNormWeights {
-  mean: TensorHandle;
-  variance: TensorHandle;
+  mean?: TensorHandle;
+  variance?: TensorHandle;
   scale: TensorHandle;
   offset: TensorHandle;
 }
@@ -67,7 +67,7 @@ export interface PredictionWeights {
   lstmWeightHH: TensorHandle;
   lstmBiasIH: TensorHandle;
   lstmBiasHH: TensorHandle;
-  outputProj: LinearWeights;
+  outputProj?: LinearWeights;
 }
 
 export interface JointWeights {

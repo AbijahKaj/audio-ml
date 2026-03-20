@@ -27,16 +27,7 @@ export class ConvModule {
     const expanded = scope.track(this.pointwise1.forward(normed));
     const gated = scope.track(this.glu(expanded));
     const depthwise = scope.track(this.depthwise(gated));
-    const bn = scope.track(
-      this.backend.batchNorm(
-        depthwise,
-        this.weights.batchNorm.mean,
-        this.weights.batchNorm.variance,
-        this.weights.batchNorm.scale,
-        this.weights.batchNorm.offset,
-        1e-5,
-      ),
-    );
+    const bn = scope.track(this.applyBatchNormOrAffine(depthwise));
     const activated = scope.track(this.backend.silu(bn));
     const output = this.pointwise2.forward(activated);
     scope.keep(output);
@@ -63,16 +54,7 @@ export class ConvModule {
     const chunkOnly = scope.track(
       this.backend.slice(depthwise, [0, offset, 0], [depthShape[0], chunkLength, depthShape[2]]),
     );
-    const bn = scope.track(
-      this.backend.batchNorm(
-        chunkOnly,
-        this.weights.batchNorm.mean,
-        this.weights.batchNorm.variance,
-        this.weights.batchNorm.scale,
-        this.weights.batchNorm.offset,
-        1e-5,
-      ),
-    );
+    const bn = scope.track(this.applyBatchNormOrAffine(chunkOnly));
     const activated = scope.track(this.backend.silu(bn));
     const output = this.pointwise2.forward(activated);
     const newState = this.extractConvState(fullInput);
@@ -123,5 +105,29 @@ export class ConvModule {
     const keepLen = Math.min(keep, shape[1]);
     const start = shape[1] - keepLen;
     return this.backend.slice(input, [0, start, 0], [shape[0], keepLen, shape[2]]);
+  }
+
+  private applyBatchNormOrAffine(x: TensorHandle): TensorHandle {
+    if (this.weights.batchNorm.mean && this.weights.batchNorm.variance) {
+      return this.backend.batchNorm(
+        x,
+        this.weights.batchNorm.mean,
+        this.weights.batchNorm.variance,
+        this.weights.batchNorm.scale,
+        this.weights.batchNorm.offset,
+        1e-5,
+      );
+    }
+
+    // Some NeMo checkpoints only store affine BN parameters (weight/bias) in state_dict.
+    const channels = this.backend.getShape(this.weights.batchNorm.scale)[0];
+    const scale = this.backend.reshape(this.weights.batchNorm.scale, [1, 1, channels]);
+    const offset = this.backend.reshape(this.weights.batchNorm.offset, [1, 1, channels]);
+    const scaled = this.backend.mul(x, scale);
+    const shifted = this.backend.add(scaled, offset);
+    this.backend.dispose(scale);
+    this.backend.dispose(offset);
+    this.backend.dispose(scaled);
+    return shifted;
   }
 }

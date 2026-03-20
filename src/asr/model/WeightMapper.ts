@@ -188,19 +188,17 @@ function mapConvModule(lookup: WeightLookup, layerIndex: number) {
       `encoder.layers.${layerIndex}.depthwise_conv.weight`,
     ),
     batchNorm: {
-      mean: lookup.pick(
+      mean: lookup.maybe(
         [
           `encoder.layers.${layerIndex}.conv.batch_norm.running_mean`,
           `encoder.layers.${layerIndex}.conv_module.batch_norm.running_mean`,
         ],
-        `encoder.layers.${layerIndex}.batch_norm.running_mean`,
       ),
-      variance: lookup.pick(
+      variance: lookup.maybe(
         [
           `encoder.layers.${layerIndex}.conv.batch_norm.running_var`,
           `encoder.layers.${layerIndex}.conv_module.batch_norm.running_var`,
         ],
-        `encoder.layers.${layerIndex}.batch_norm.running_var`,
       ),
       scale: lookup.pick(
         [
@@ -258,26 +256,48 @@ function mapPrediction(lookup: WeightLookup): PredictionWeights {
       'decoder.prediction.embedding.weight',
     ),
     lstmWeightIH: lookup.pick(
-      ['decoder.prediction.dec_rnn.weight_ih_l0', 'decoder.prediction.lstm.weight_ih_l0'],
+      [
+        'decoder.prediction.dec_rnn.lstm.weight_ih_l0',
+        'decoder.prediction.dec_rnn.weight_ih_l0',
+        'decoder.prediction.lstm.weight_ih_l0',
+      ],
       'decoder.prediction.lstm.weight_ih_l0',
     ),
     lstmWeightHH: lookup.pick(
-      ['decoder.prediction.dec_rnn.weight_hh_l0', 'decoder.prediction.lstm.weight_hh_l0'],
+      [
+        'decoder.prediction.dec_rnn.lstm.weight_hh_l0',
+        'decoder.prediction.dec_rnn.weight_hh_l0',
+        'decoder.prediction.lstm.weight_hh_l0',
+      ],
       'decoder.prediction.lstm.weight_hh_l0',
     ),
     lstmBiasIH: lookup.pick(
-      ['decoder.prediction.dec_rnn.bias_ih_l0', 'decoder.prediction.lstm.bias_ih_l0'],
+      [
+        'decoder.prediction.dec_rnn.lstm.bias_ih_l0',
+        'decoder.prediction.dec_rnn.bias_ih_l0',
+        'decoder.prediction.lstm.bias_ih_l0',
+      ],
       'decoder.prediction.lstm.bias_ih_l0',
     ),
     lstmBiasHH: lookup.pick(
-      ['decoder.prediction.dec_rnn.bias_hh_l0', 'decoder.prediction.lstm.bias_hh_l0'],
+      [
+        'decoder.prediction.dec_rnn.lstm.bias_hh_l0',
+        'decoder.prediction.dec_rnn.bias_hh_l0',
+        'decoder.prediction.lstm.bias_hh_l0',
+      ],
       'decoder.prediction.lstm.bias_hh_l0',
     ),
-    outputProj: mapLinear(lookup, [
-      'decoder.prediction.output_proj',
-      'decoder.prediction.project',
-      'decoder.prediction.lin_out',
-    ]),
+    outputProj: lookup.maybe([
+      'decoder.prediction.output_proj.weight',
+      'decoder.prediction.project.weight',
+      'decoder.prediction.lin_out.weight',
+    ])
+      ? mapLinear(lookup, [
+          'decoder.prediction.output_proj',
+          'decoder.prediction.project',
+          'decoder.prediction.lin_out',
+        ])
+      : undefined,
   };
 }
 
