@@ -10,7 +10,7 @@ import type {
   ModelWeights,
   PredictionWeights,
   SelfAttentionWeights,
-  SubsamplingConvLayer,
+  SubsamplingLayerSpec,
   SubsamplingWeights,
 } from './weights';
 import type { TensorHandle } from '../compute/types';
@@ -55,16 +55,42 @@ function jointNetModulePrefix(weights: Map<string, TensorHandle>): string {
   return `joint.joint_net.${last}`;
 }
 
-function mapSubsampling(get: (k: string) => TensorHandle, weights: Map<string, TensorHandle>): SubsamplingWeights {
+function mapSubsampling(
+  get: (k: string) => TensorHandle,
+  weights: Map<string, TensorHandle>,
+  backend: ComputeBackend,
+  config: FastConformerConfig,
+): SubsamplingWeights {
   const convIndices = collectSubsamplingConvKeys(weights);
-  const convLayers: SubsamplingConvLayer[] = convIndices.map(i => ({
-    weight: get(`encoder.pre_encode.conv.${i}.weight`),
-    bias: weights.has(`encoder.pre_encode.conv.${i}.bias`)
+  const layers: SubsamplingLayerSpec[] = [];
+  const subs = config.subsampling;
+
+  for (const i of convIndices) {
+    const weight = get(`encoder.pre_encode.conv.${i}.weight`);
+    const bias = weights.has(`encoder.pre_encode.conv.${i}.bias`)
       ? get(`encoder.pre_encode.conv.${i}.bias`)
-      : null,
-  }));
+      : null;
+    const sh = backend.getShape(weight);
+
+    if (subs !== 'dw_striding' || sh.length !== 4) {
+      layers.push({ kind: 'conv2d_s2', weight, bias });
+      continue;
+    }
+
+    const [, inCh, kh, kw] = sh;
+    if (layers.length === 0 && inCh === 1 && kh === 3) {
+      layers.push({ kind: 'conv2d_s2', weight, bias });
+    } else if (inCh === 1 && kh === 3) {
+      layers.push({ kind: 'depthwise_s2', weight, bias });
+    } else if (kh === 1 && kw === 1) {
+      layers.push({ kind: 'pointwise1x1', weight, bias });
+    } else {
+      layers.push({ kind: 'conv2d_s2', weight, bias });
+    }
+  }
+
   const outW = linearParam(weights, get, 'encoder.pre_encode.out.weight');
-  return { convLayers, out: outW };
+  return { layers, out: outW };
 }
 
 function mapConvModule(
@@ -72,20 +98,18 @@ function mapConvModule(
   get: (k: string) => TensorHandle,
   prefix: string,
 ): ConvModuleWeights {
+  const useBn = weights.has(`${prefix}.batch_norm.running_mean`);
   return {
-    norm: ln(get, `${prefix}.norm.weight`, `${prefix}.norm.bias`),
-    pointwise1: linearParam(weights, get, `${prefix}.pointwise_conv1.weight`),
+    afterDepthwise: ln(get, `${prefix}.batch_norm.weight`, `${prefix}.batch_norm.bias`),
+    useBatchNormStats: useBn,
+    bnRunningMean: useBn ? get(`${prefix}.batch_norm.running_mean`) : null,
+    bnRunningVar: useBn ? get(`${prefix}.batch_norm.running_var`) : null,
+    pointwise1: linearParam(weights, get, `${prefix}.pointwise_conv1.weight`, false),
     depthwiseWeight: get(`${prefix}.depthwise_conv.weight`),
     depthwiseBias: weights.has(`${prefix}.depthwise_conv.bias`)
       ? get(`${prefix}.depthwise_conv.bias`)
       : null,
-    batchNorm: {
-      mean: get(`${prefix}.batch_norm.running_mean`),
-      variance: get(`${prefix}.batch_norm.running_var`),
-      scale: get(`${prefix}.batch_norm.weight`),
-      offset: get(`${prefix}.batch_norm.bias`),
-    },
-    pointwise2: linearParam(weights, get, `${prefix}.pointwise_conv2.weight`),
+    pointwise2: linearParam(weights, get, `${prefix}.pointwise_conv2.weight`, false),
   };
 }
 
@@ -141,7 +165,7 @@ function mapPrediction(get: (k: string) => TensorHandle, weights: Map<string, Te
 
   const lstmLayerIdx = new Set<number>();
   for (const k of weights.keys()) {
-    const m = k.match(/^decoder\.prediction\.dec_rnn\.weight_ih_l(\d+)$/);
+    const m = k.match(/^decoder\.prediction\.dec_rnn(?:\.lstm)?\.weight_ih_l(\d+)$/);
     if (m) {
       lstmLayerIdx.add(parseInt(m[1], 10));
     }
@@ -150,11 +174,14 @@ function mapPrediction(get: (k: string) => TensorHandle, weights: Map<string, Te
   if (layers.length === 0) {
     throw new Error('No decoder.prediction.dec_rnn LSTM weights');
   }
+  const lstmPrefix = weights.has('decoder.prediction.dec_rnn.lstm.weight_ih_l0')
+    ? 'decoder.prediction.dec_rnn.lstm'
+    : 'decoder.prediction.dec_rnn';
   const lstm = {
-    weightIh: get('decoder.prediction.dec_rnn.weight_ih_l0'),
-    weightHh: get('decoder.prediction.dec_rnn.weight_hh_l0'),
-    biasIh: get('decoder.prediction.dec_rnn.bias_ih_l0'),
-    biasHh: get('decoder.prediction.dec_rnn.bias_hh_l0'),
+    weightIh: get(`${lstmPrefix}.weight_ih_l0`),
+    weightHh: get(`${lstmPrefix}.weight_hh_l0`),
+    biasIh: get(`${lstmPrefix}.bias_ih_l0`),
+    biasHh: get(`${lstmPrefix}.bias_hh_l0`),
   };
   if (layers.length > 1) {
     console.warn(
@@ -188,7 +215,7 @@ function mapJoint(
 export function mapWeights(
   weights: Map<string, TensorHandle>,
   config: FastConformerConfig,
-  _backend: ComputeBackend,
+  backend: ComputeBackend,
 ): ModelWeights {
   const consumed = new Set<string>();
 
@@ -201,7 +228,7 @@ export function mapWeights(
   }
 
   const encoder: EncoderWeights = {
-    subsampling: mapSubsampling(get, weights),
+    subsampling: mapSubsampling(get, weights, backend, config),
     layers: Array.from({ length: config.encoderLayers }, (_, i) => mapConformerLayer(weights, get, i)),
   };
 

@@ -10,13 +10,14 @@ export interface LinearParams {
   bias: TensorHandle | null;
 }
 
-export interface SubsamplingConvLayer {
-  weight: TensorHandle;
-  bias: TensorHandle | null;
-}
+/** NeMo ConvSubsampling: striding uses stacked 3×3 stride-2 convs; dw_striding uses conv + (depthwise+pointwise)×k. */
+export type SubsamplingLayerSpec =
+  | { kind: 'conv2d_s2'; weight: TensorHandle; bias: TensorHandle | null }
+  | { kind: 'depthwise_s2'; weight: TensorHandle; bias: TensorHandle | null }
+  | { kind: 'pointwise1x1'; weight: TensorHandle; bias: TensorHandle | null };
 
 export interface SubsamplingWeights {
-  convLayers: SubsamplingConvLayer[];
+  layers: SubsamplingLayerSpec[];
   out: LinearParams;
 }
 
@@ -31,16 +32,14 @@ export interface SelfAttentionWeights {
 }
 
 export interface ConvModuleWeights {
-  norm: LayerNormParams;
+  /** After depthwise: NeMo uses `batch_norm.*` for LayerNorm or BatchNorm1d. */
+  afterDepthwise: LayerNormParams;
+  useBatchNormStats: boolean;
+  bnRunningMean: TensorHandle | null;
+  bnRunningVar: TensorHandle | null;
   pointwise1: LinearParams;
   depthwiseWeight: TensorHandle;
   depthwiseBias: TensorHandle | null;
-  batchNorm: {
-    mean: TensorHandle;
-    variance: TensorHandle;
-    scale: TensorHandle;
-    offset: TensorHandle;
-  };
   pointwise2: LinearParams;
 }
 
