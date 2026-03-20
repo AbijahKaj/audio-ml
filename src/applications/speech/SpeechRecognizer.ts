@@ -101,6 +101,7 @@ export class SpeechRecognizer extends BaseApplication {
   private bufferedStreamingSamples = 0;
   private samplesSinceLastDecode = 0;
   private lastPartialText = '';
+  private hasActiveSpeech = false;
   private processingQueue: Promise<void> = Promise.resolve();
   private tokenBuffer: number[] = [];
   private loaded = false;
@@ -231,6 +232,7 @@ export class SpeechRecognizer extends BaseApplication {
     this.chunkedInference?.reset();
     this.endpointer?.reset();
     this.resampler?.reset();
+    this.hasActiveSpeech = false;
   }
 
   dispose(): void {
@@ -300,6 +302,15 @@ export class SpeechRecognizer extends BaseApplication {
     this.bufferedStreamingSamples += resampled.length;
     this.samplesSinceLastDecode += resampled.length;
     const endpoint = this.endpointer.processFrame(resampled);
+    if (endpoint === 'speech') {
+      this.hasActiveSpeech = true;
+    }
+    if (!this.hasActiveSpeech && endpoint !== 'speech-end') {
+      this.bufferedStreamingAudio = [];
+      this.bufferedStreamingSamples = 0;
+      this.samplesSinceLastDecode = 0;
+      return;
+    }
     const shouldDecode = this.samplesSinceLastDecode >= this.streamingPartialIntervalSamples
       || endpoint === 'speech-end';
     if (!shouldDecode) {
@@ -324,6 +335,7 @@ export class SpeechRecognizer extends BaseApplication {
       this.lastPartialText = '';
       this.endpointer.reset();
       this.resampler.reset();
+      this.hasActiveSpeech = false;
       return;
     }
 
