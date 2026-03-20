@@ -30,3 +30,4 @@ export { SentencePieceDecoder } from './text/SentencePieceDecoder';
 export { CacheManager, type StreamingCache } from './streaming/CacheManager';
 export { ChunkedInference, type ChunkedInferenceResult } from './streaming/ChunkedInference';
 export { Endpointer, type EndpointerConfig, type EndpointDecision } from './streaming/Endpointer';
+export { NemoPythonBridge, type NemoBridgeConfig, type NemoBridgeReadyInfo } from './bridge/NemoPythonBridge';

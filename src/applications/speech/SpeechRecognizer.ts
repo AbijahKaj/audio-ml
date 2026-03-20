@@ -13,10 +13,12 @@ import { Resampler } from '../../asr/features/Resampler';
 import { CacheManager } from '../../asr/streaming/CacheManager';
 import { ChunkedInference } from '../../asr/streaming/ChunkedInference';
 import { Endpointer } from '../../asr/streaming/Endpointer';
+import { NemoPythonBridge } from '../../asr/bridge/NemoPythonBridge';
 
 type BackendType = 'wasm' | 'webgpu' | 'webgl' | 'cpu';
 type ModelSource = string | ArrayBuffer | Uint8Array;
 type VocabSource = string | string[];
+type InferenceEngine = 'tfjs' | 'nemo-python';
 
 interface FetchResponseLike {
   text(): Promise<string>;
@@ -32,6 +34,11 @@ export interface SpeechRecognizerConfig extends ApplicationConfig {
   configSource?: string;
   vocabSource?: VocabSource;
   backend?: BackendType;
+  engine?: InferenceEngine;
+  nemoModelName?: string;
+  nemoPythonPath?: string;
+  nemoBridgeScriptPath?: string;
+  streamingPartialIntervalMs?: number;
 }
 
 export interface ASRResult {
@@ -76,6 +83,7 @@ async function resolveText(pathOrText: string | undefined): Promise<string> {
 
 export class SpeechRecognizer extends BaseApplication {
   private readonly backendType: BackendType;
+  private readonly engine: InferenceEngine;
   private backend: ComputeBackend | null = null;
   private modelConfig: FastConformerConfig | null = null;
   private featurePipeline: FeaturePipeline | null = null;
@@ -84,15 +92,30 @@ export class SpeechRecognizer extends BaseApplication {
   private tokenizer: SentencePieceDecoder | null = null;
   private resampler: Resampler | null = null;
   private chunkedInference: ChunkedInference | null = null;
+  private endpointer: Endpointer | null = null;
+  private nemoBridge: NemoPythonBridge | null = null;
+  private nemoModelSampleRate = 16000;
+  private decoderType: DecoderType = 'rnnt';
+  private streamingPartialIntervalSamples = 6400;
+  private bufferedStreamingAudio: Float32Array[] = [];
+  private bufferedStreamingSamples = 0;
+  private lastPartialText = '';
+  private processingQueue: Promise<void> = Promise.resolve();
   private tokenBuffer: number[] = [];
   private loaded = false;
 
   constructor(private config: SpeechRecognizerConfig) {
     super(config);
     this.backendType = config.backend ?? 'wasm';
+    this.engine = config.engine ?? 'tfjs';
   }
 
   async load(): Promise<void> {
+    if (this.engine === 'nemo-python') {
+      await this.loadNemoBridgeEngine();
+      return;
+    }
+
     const backend = new TfjsBackend(this.backendType);
     await backend.ready();
 
@@ -136,7 +159,9 @@ export class SpeechRecognizer extends BaseApplication {
     this.tokenizer = tokenizer;
     this.resampler = resampler;
     this.chunkedInference = chunkedInference;
+    this.endpointer = endpointer;
     this.loaded = true;
+    this.decoderType = modelConfig.decoderType;
 
     this.emit('ready', {
       decoderType: modelConfig.decoderType,
@@ -147,6 +172,15 @@ export class SpeechRecognizer extends BaseApplication {
   }
 
   processFrame(pcm: Float32Array): void {
+    if (this.engine === 'nemo-python') {
+      this.processingQueue = this.processingQueue
+        .then(() => this.processFrameWithNemo(pcm))
+        .catch((error: unknown) => {
+          this.emit('error', error);
+        });
+      return;
+    }
+
     void this.processFrameInternal(pcm).catch((error: unknown) => {
       this.emit('error', error);
     });
@@ -155,6 +189,17 @@ export class SpeechRecognizer extends BaseApplication {
   async transcribe(audio: Float32Array): Promise<ASRResult> {
     this.ensureLoaded();
     const start = nowMs();
+
+    if (this.engine === 'nemo-python') {
+      const resampled = this.resampler ? this.resampler.resample(audio) : audio;
+      const text = await this.nemoBridge!.transcribePcm(resampled, this.nemoModelSampleRate);
+      return {
+        text,
+        isFinal: true,
+        latencyMs: nowMs() - start,
+        decoderType: this.decoderType,
+      };
+    }
 
     const backend = this.backend as ComputeBackend;
     const resampled = this.resampler ? this.resampler.resample(audio) : audio;
@@ -171,20 +216,28 @@ export class SpeechRecognizer extends BaseApplication {
       text,
       isFinal: true,
       latencyMs: nowMs() - start,
-      decoderType: this.modelConfig!.decoderType,
+      decoderType: this.decoderType,
     };
   }
 
   override reset(): void {
     super.reset();
     this.tokenBuffer = [];
+    this.lastPartialText = '';
+    this.bufferedStreamingAudio = [];
+    this.bufferedStreamingSamples = 0;
     this.chunkedInference?.reset();
+    this.endpointer?.reset();
     this.resampler?.reset();
   }
 
   dispose(): void {
     this.chunkedInference?.dispose();
     this.chunkedInference = null;
+    if (this.nemoBridge) {
+      void this.nemoBridge.stop();
+      this.nemoBridge = null;
+    }
     this.backend = null;
     this.loaded = false;
   }
@@ -210,7 +263,7 @@ export class SpeechRecognizer extends BaseApplication {
         tokenIds: [...this.tokenBuffer],
         isFinal: false,
         latencyMs: nowMs() - start,
-        decoderType: this.modelConfig.decoderType,
+        decoderType: this.decoderType,
       };
       this.emit('partial', partial);
     }
@@ -222,16 +275,121 @@ export class SpeechRecognizer extends BaseApplication {
         tokenIds: [...this.tokenBuffer],
         isFinal: true,
         latencyMs: nowMs() - start,
-        decoderType: this.modelConfig.decoderType,
+        decoderType: this.decoderType,
       };
       this.emit('final', finalResult);
       this.tokenBuffer = [];
     }
   }
 
+  private async processFrameWithNemo(pcm: Float32Array): Promise<void> {
+    this.ensureLoaded();
+    if (!this.nemoBridge || !this.resampler || !this.endpointer) {
+      return;
+    }
+
+    const start = nowMs();
+    const resampled = this.resampler.resampleStreaming(pcm);
+    if (resampled.length === 0) {
+      return;
+    }
+
+    this.bufferedStreamingAudio.push(resampled);
+    this.bufferedStreamingSamples += resampled.length;
+    const endpoint = this.endpointer.processFrame(resampled);
+    const shouldDecode = this.bufferedStreamingSamples >= this.streamingPartialIntervalSamples
+      || endpoint === 'speech-end';
+    if (!shouldDecode) {
+      return;
+    }
+
+    const audio = this.concatFloat32Arrays(this.bufferedStreamingAudio);
+    const text = await this.nemoBridge.transcribePcm(audio, this.nemoModelSampleRate);
+
+    if (endpoint === 'speech-end') {
+      const finalResult: StreamingASRResult = {
+        text,
+        tokenIds: [],
+        isFinal: true,
+        latencyMs: nowMs() - start,
+        decoderType: this.decoderType,
+      };
+      this.emit('final', finalResult);
+      this.bufferedStreamingAudio = [];
+      this.bufferedStreamingSamples = 0;
+      this.lastPartialText = '';
+      this.endpointer.reset();
+      this.resampler.reset();
+      return;
+    }
+
+    if (text !== this.lastPartialText) {
+      this.lastPartialText = text;
+      const partialResult: StreamingASRResult = {
+        text,
+        tokenIds: [],
+        isFinal: false,
+        latencyMs: nowMs() - start,
+        decoderType: this.decoderType,
+      };
+      this.emit('partial', partialResult);
+    }
+  }
+
+  private async loadNemoBridgeEngine(): Promise<void> {
+    const modelName = this.config.nemoModelName ?? this.config.modelPath;
+    if (!modelName) {
+      throw new Error('nemo-python engine requires nemoModelName (or modelPath as model name).');
+    }
+
+    const bridge = new NemoPythonBridge({
+      pythonPath: this.config.nemoPythonPath,
+      scriptPath: this.config.nemoBridgeScriptPath,
+    });
+    const ready = await bridge.start(modelName);
+    this.nemoBridge = bridge;
+    this.decoderType = ready.decoderType;
+    this.nemoModelSampleRate = ready.sampleRate;
+    this.resampler = new Resampler(this.sampleRate, ready.sampleRate);
+    this.endpointer = new Endpointer({ sampleRate: ready.sampleRate });
+    const intervalMs = this.config.streamingPartialIntervalMs ?? 400;
+    this.streamingPartialIntervalSamples = Math.max(
+      Math.round((ready.sampleRate * intervalMs) / 1000),
+      Math.round(ready.sampleRate * 0.1),
+    );
+    this.loaded = true;
+
+    this.emit('ready', {
+      decoderType: this.decoderType,
+      engine: 'nemo-python',
+      modelName: ready.modelName,
+      sampleRate: ready.sampleRate,
+    });
+  }
+
   private ensureLoaded(): void {
     if (!this.loaded) {
       throw new Error('SpeechRecognizer is not loaded. Call load() first.');
     }
+  }
+
+  private concatFloat32Arrays(chunks: Float32Array[]): Float32Array {
+    if (chunks.length === 0) {
+      return new Float32Array(0);
+    }
+    if (chunks.length === 1) {
+      return chunks[0];
+    }
+    let length = 0;
+    for (const chunk of chunks) {
+      length += chunk.length;
+    }
+    const merged = new Float32Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return merged;
   }
 }
