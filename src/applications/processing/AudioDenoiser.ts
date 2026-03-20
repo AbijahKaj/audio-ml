@@ -3,11 +3,11 @@
  * Removes noise from audio using spectral subtraction and adaptive noise estimation
  */
 
-import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication';
-import { type DenoisedFrame } from '../base/types';
+import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication.js';
+import { type DenoisedFrame } from '../base/types.js';
 import FFT from 'fft.js';
-import { RMSEAnalyzer } from '../../analysis/RMSEAnalyzer';
-import { SpectralFlatnessAnalyzer } from '../../analysis/SpectralFlatnessAnalyzer';
+import { RMSEAnalyzer } from '../../analysis/RMSEAnalyzer.js';
+import { SpectralFlatnessAnalyzer } from '../../analysis/SpectralFlatnessAnalyzer.js';
 
 export interface AudioDenoiserConfig extends ApplicationConfig {
   /** FFT size (default: 2048) */

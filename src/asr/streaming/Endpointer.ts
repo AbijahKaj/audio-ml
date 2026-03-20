@@ -1,4 +1,4 @@
-import { VAD, type VADConfig } from '../../applications/speech/VAD';
+import { VAD, type VADConfig } from '../../applications/speech/VAD.js';
 
 export type EndpointState = 'speech' | 'silence' | 'speech-end';
 

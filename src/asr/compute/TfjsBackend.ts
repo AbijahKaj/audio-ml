@@ -1,8 +1,8 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-wasm';
 
-import type { ComputeBackend } from './Backend';
-import type { BackendKind, Dtype, Shape, TensorHandle } from './types';
+import type { ComputeBackend } from './Backend.js';
+import type { BackendKind, Dtype, Shape, TensorHandle } from './types.js';
 
 function toTensor(tensor: TensorHandle): tf.Tensor {
   return tensor as tf.Tensor;

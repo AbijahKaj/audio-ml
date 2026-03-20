@@ -1,9 +1,9 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { FastConformerConfig } from '../model/ModelConfig';
-import type { EncoderWeights } from '../model/WeightMapper';
-import { ConformerBlock } from './ConformerBlock';
-import { ConvSubsampling } from './ConvSubsampling';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { FastConformerConfig } from '../model/ModelConfig.js';
+import type { EncoderWeights } from '../model/WeightMapper.js';
+import { ConformerBlock } from './ConformerBlock.js';
+import { ConvSubsampling } from './ConvSubsampling.js';
 
 export class FastConformerEncoder {
   private readonly subsampling: ConvSubsampling;

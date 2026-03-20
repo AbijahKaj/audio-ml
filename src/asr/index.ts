@@ -1,35 +1,41 @@
-export { SpeechRecognizer, type SpeechRecognizerConfig, type ASRResult } from '../applications/speech/SpeechRecognizer';
+export {
+  SpeechRecognizer,
+  type SpeechRecognizerConfig,
+  type SpeechRecognizerProvider,
+  type TransformersDtype,
+  type ASRResult,
+} from '../applications/speech/SpeechRecognizer.js';
 
-export { TfjsBackend } from './compute/TfjsBackend';
-export type { ComputeBackend } from './compute/Backend';
-export type { BackendKind, Dtype, Shape, TensorHandle } from './compute/types';
+export { TfjsBackend } from './compute/TfjsBackend.js';
+export type { ComputeBackend } from './compute/Backend.js';
+export type { BackendKind, Dtype, Shape, TensorHandle } from './compute/types.js';
 
-export { FeaturePipeline } from './features/FeaturePipeline';
-export { Resampler } from './features/Resampler';
+export { FeaturePipeline } from './features/FeaturePipeline.js';
+export { Resampler } from './features/Resampler.js';
 
-export { FastConformerEncoder } from './encoder/FastConformerEncoder';
-export { ConvSubsampling } from './encoder/ConvSubsampling';
-export { ConformerBlock } from './encoder/ConformerBlock';
-export { ConvModule } from './encoder/ConvModule';
-export { FeedForward } from './encoder/FeedForward';
-export { Linear } from './encoder/Linear';
-export { MultiHeadAttention } from './encoder/MultiHeadAttention';
-export { RelativePositionalEncoding } from './encoder/RelativePositionalEncoding';
+export { FastConformerEncoder } from './encoder/FastConformerEncoder.js';
+export { ConvSubsampling } from './encoder/ConvSubsampling.js';
+export { ConformerBlock } from './encoder/ConformerBlock.js';
+export { ConvModule } from './encoder/ConvModule.js';
+export { FeedForward } from './encoder/FeedForward.js';
+export { Linear } from './encoder/Linear.js';
+export { MultiHeadAttention } from './encoder/MultiHeadAttention.js';
+export { RelativePositionalEncoding } from './encoder/RelativePositionalEncoding.js';
 
-export { PredictionNetwork } from './decoder/PredictionNetwork';
-export { JointNetwork } from './decoder/JointNetwork';
-export { RNNTJointNetwork } from './decoder/RNNTJointNetwork';
-export { TDTJointNetwork } from './decoder/TDTJointNetwork';
-export { RNNTGreedyDecoder } from './decoder/RNNTGreedyDecoder';
-export { TDTGreedyDecoder } from './decoder/TDTGreedyDecoder';
-export { createDecoder } from './decoder/createDecoder';
+export { PredictionNetwork } from './decoder/PredictionNetwork.js';
+export { JointNetwork } from './decoder/JointNetwork.js';
+export { RNNTJointNetwork } from './decoder/RNNTJointNetwork.js';
+export { TDTJointNetwork } from './decoder/TDTJointNetwork.js';
+export { RNNTGreedyDecoder } from './decoder/RNNTGreedyDecoder.js';
+export { TDTGreedyDecoder } from './decoder/TDTGreedyDecoder.js';
+export { createDecoder } from './decoder/createDecoder.js';
 
-export { CacheManager, type StreamingCache } from './streaming/CacheManager';
-export { ChunkedInference } from './streaming/ChunkedInference';
-export { Endpointer, type EndpointState } from './streaming/Endpointer';
+export { CacheManager, type StreamingCache } from './streaming/CacheManager.js';
+export { ChunkedInference } from './streaming/ChunkedInference.js';
+export { Endpointer, type EndpointState } from './streaming/Endpointer.js';
 
-export { SentencePieceDecoder } from './text/SentencePieceDecoder';
+export { SentencePieceDecoder } from './text/SentencePieceDecoder.js';
 
-export { parseModelConfig, type DecoderType, type FastConformerConfig } from './model/ModelConfig';
-export { loadSafeTensors } from './model/SafeTensorsLoader';
-export { mapWeights } from './model/WeightMapper';
+export { parseModelConfig, type DecoderType, type FastConformerConfig } from './model/ModelConfig.js';
+export { loadSafeTensors } from './model/SafeTensorsLoader.js';
+export { mapWeights } from './model/WeightMapper.js';

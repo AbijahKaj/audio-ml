@@ -1,7 +1,7 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { FastConformerConfig } from '../model/ModelConfig';
-import type { PredictionState } from '../decoder/PredictionNetwork';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { FastConformerConfig } from '../model/ModelConfig.js';
+import type { PredictionState } from '../decoder/PredictionNetwork.js';
 
 export interface StreamingCache {
   attentionKV: Array<{ k: TensorHandle | null; v: TensorHandle | null }>;

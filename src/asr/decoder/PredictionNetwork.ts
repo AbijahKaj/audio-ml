@@ -1,8 +1,8 @@
-import { ComputeScope } from '../compute/Scope';
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { PredictionWeights } from '../model/WeightMapper';
-import { Linear } from '../encoder/Linear';
+import { ComputeScope } from '../compute/Scope.js';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { PredictionWeights } from '../model/WeightMapper.js';
+import { Linear } from '../encoder/Linear.js';
 
 export interface PredictionState {
   h: TensorHandle;

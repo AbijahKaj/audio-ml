@@ -14,25 +14,25 @@
  */
 
 // Frequency Domain Analyzers
-export { FFTAnalyzer, type FFTConfig } from './FFTAnalyzer';
-export { MFCCAnalyzer, type MFCCConfig } from './MFCCAnalyzer';
-export { PLPAnalyzer, type PLPConfig } from './PLPAnalyzer';
-export { MelSpectrogramAnalyzer, type MelSpectrogramConfig } from './MelSpectrogramAnalyzer';
-export { ConstantQTransformAnalyzer, type ConstantQTransformConfig } from './ConstantQTransformAnalyzer';
-export { ChromaFeaturesAnalyzer, type ChromaFeaturesConfig } from './ChromaFeaturesAnalyzer';
+export { FFTAnalyzer, type FFTConfig } from './FFTAnalyzer.js';
+export { MFCCAnalyzer, type MFCCConfig } from './MFCCAnalyzer.js';
+export { PLPAnalyzer, type PLPConfig } from './PLPAnalyzer.js';
+export { MelSpectrogramAnalyzer, type MelSpectrogramConfig } from './MelSpectrogramAnalyzer.js';
+export { ConstantQTransformAnalyzer, type ConstantQTransformConfig } from './ConstantQTransformAnalyzer.js';
+export { ChromaFeaturesAnalyzer, type ChromaFeaturesConfig } from './ChromaFeaturesAnalyzer.js';
 
 // Spectral Feature Analyzers
-export { SpectralCentroidAnalyzer, type SpectralCentroidConfig } from './SpectralCentroidAnalyzer';
-export { SpectralRolloffAnalyzer, type SpectralRolloffConfig } from './SpectralRolloffAnalyzer';
-export { SpectralBandwidthAnalyzer, type SpectralBandwidthConfig } from './SpectralBandwidthAnalyzer';
-export { SpectralFlatnessAnalyzer, type SpectralFlatnessConfig } from './SpectralFlatnessAnalyzer';
+export { SpectralCentroidAnalyzer, type SpectralCentroidConfig } from './SpectralCentroidAnalyzer.js';
+export { SpectralRolloffAnalyzer, type SpectralRolloffConfig } from './SpectralRolloffAnalyzer.js';
+export { SpectralBandwidthAnalyzer, type SpectralBandwidthConfig } from './SpectralBandwidthAnalyzer.js';
+export { SpectralFlatnessAnalyzer, type SpectralFlatnessConfig } from './SpectralFlatnessAnalyzer.js';
 
 // Time Domain Analyzers
-export { ZeroCrossingRateAnalyzer, type ZeroCrossingRateConfig } from './ZeroCrossingRateAnalyzer';
-export { RMSEAnalyzer, type RMSEConfig } from './RMSEAnalyzer';
-export { WaveformEnvelopeAnalyzer, type WaveformEnvelopeConfig } from './WaveformEnvelopeAnalyzer';
-export { AutocorrelationAnalyzer, type AutocorrelationConfig } from './AutocorrelationAnalyzer';
+export { ZeroCrossingRateAnalyzer, type ZeroCrossingRateConfig } from './ZeroCrossingRateAnalyzer.js';
+export { RMSEAnalyzer, type RMSEConfig } from './RMSEAnalyzer.js';
+export { WaveformEnvelopeAnalyzer, type WaveformEnvelopeConfig } from './WaveformEnvelopeAnalyzer.js';
+export { AutocorrelationAnalyzer, type AutocorrelationConfig } from './AutocorrelationAnalyzer.js';
 
 // Advanced Analyzers
-export { LPCAnalyzer, type LPCConfig } from './LPCAnalyzer';
-export { WaveletTransformAnalyzer, type WaveletTransformConfig } from './WaveletTransformAnalyzer';
+export { LPCAnalyzer, type LPCConfig } from './LPCAnalyzer.js';
+export { WaveletTransformAnalyzer, type WaveletTransformConfig } from './WaveletTransformAnalyzer.js';

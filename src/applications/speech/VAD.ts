@@ -3,12 +3,12 @@
  * Detects when speech is present vs silence/noise using multiple audio features
  */
 
-import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication';
-import { type VADResult } from '../base/types';
-import { RMSEAnalyzer } from '../../analysis/RMSEAnalyzer';
-import { ZeroCrossingRateAnalyzer } from '../../analysis/ZeroCrossingRateAnalyzer';
-import { SpectralFlatnessAnalyzer } from '../../analysis/SpectralFlatnessAnalyzer';
-import { SpectralCentroidAnalyzer } from '../../analysis/SpectralCentroidAnalyzer';
+import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication.js';
+import { type VADResult } from '../base/types.js';
+import { RMSEAnalyzer } from '../../analysis/RMSEAnalyzer.js';
+import { ZeroCrossingRateAnalyzer } from '../../analysis/ZeroCrossingRateAnalyzer.js';
+import { SpectralFlatnessAnalyzer } from '../../analysis/SpectralFlatnessAnalyzer.js';
+import { SpectralCentroidAnalyzer } from '../../analysis/SpectralCentroidAnalyzer.js';
 
 export interface VADConfig extends ApplicationConfig {
   /** Energy threshold for speech detection (default: 0.01) */

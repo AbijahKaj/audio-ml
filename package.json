@@ -50,9 +50,11 @@
     "url": "git+https://github.com/AbijahKaj/audio-ml.git"
   },
   "devDependencies": {
+    "puppeteer-core": "^24.40.0",
     "typescript": "~5.9.3"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-backend-wasm": "^4.22.0",
     "fft.js": "^4.0.4"

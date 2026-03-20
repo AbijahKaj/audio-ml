@@ -1,9 +1,9 @@
-import { ComputeScope } from '../compute/Scope';
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { AttentionWeights } from '../model/WeightMapper';
-import { Linear } from './Linear';
-import { RelativePositionalEncoding } from './RelativePositionalEncoding';
+import { ComputeScope } from '../compute/Scope.js';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { AttentionWeights } from '../model/WeightMapper.js';
+import { Linear } from './Linear.js';
+import { RelativePositionalEncoding } from './RelativePositionalEncoding.js';
 
 export class MultiHeadAttention {
   private readonly qProj: Linear;

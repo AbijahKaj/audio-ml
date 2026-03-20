@@ -1,5 +1,5 @@
-import type { TensorHandle } from '../compute/types';
-import type { FastConformerConfig } from './ModelConfig';
+import type { TensorHandle } from '../compute/types.js';
+import type { FastConformerConfig } from './ModelConfig.js';
 
 export interface LinearWeightPair {
   weight: TensorHandle | null;

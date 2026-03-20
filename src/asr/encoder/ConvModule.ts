@@ -1,8 +1,8 @@
-import { ComputeScope } from '../compute/Scope';
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { ConvModuleWeights } from '../model/WeightMapper';
-import { Linear } from './Linear';
+import { ComputeScope } from '../compute/Scope.js';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { ConvModuleWeights } from '../model/WeightMapper.js';
+import { Linear } from './Linear.js';
 
 export class ConvModule {
   private readonly pointwiseIn: Linear;

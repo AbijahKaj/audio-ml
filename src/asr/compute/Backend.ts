@@ -1,4 +1,4 @@
-import type { BackendKind, Dtype, Shape, TensorHandle } from './types';
+import type { BackendKind, Dtype, Shape, TensorHandle } from './types.js';
 
 export interface ComputeBackend {
   readonly backendKind: BackendKind;

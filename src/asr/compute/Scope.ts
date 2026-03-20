@@ -1,5 +1,5 @@
-import type { ComputeBackend } from './Backend';
-import type { TensorHandle } from './types';
+import type { ComputeBackend } from './Backend.js';
+import type { TensorHandle } from './types.js';
 
 export class ComputeScope {
   private tensors: TensorHandle[] = [];

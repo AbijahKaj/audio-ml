@@ -1,8 +1,8 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { FastConformerConfig } from '../model/ModelConfig';
-import type { EncoderWeights } from '../model/WeightMapper';
-import { Linear } from './Linear';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { FastConformerConfig } from '../model/ModelConfig.js';
+import type { EncoderWeights } from '../model/WeightMapper.js';
+import { Linear } from './Linear.js';
 
 export class ConvSubsampling {
   private readonly inputProjection: Linear;

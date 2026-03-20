@@ -1,5 +1,5 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
 
 export class RelativePositionalEncoding {
   constructor(private readonly backend: ComputeBackend) {}

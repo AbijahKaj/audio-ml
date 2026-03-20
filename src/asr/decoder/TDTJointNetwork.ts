@@ -1,8 +1,8 @@
-import type { TensorHandle } from '../compute/types';
-import type { ComputeBackend } from '../compute/Backend';
-import type { JointWeights } from '../model/WeightMapper';
-import { Linear } from '../encoder/Linear';
-import { JointNetwork } from './JointNetwork';
+import type { TensorHandle } from '../compute/types.js';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { JointWeights } from '../model/WeightMapper.js';
+import { Linear } from '../encoder/Linear.js';
+import { JointNetwork } from './JointNetwork.js';
 
 export class TDTJointNetwork extends JointNetwork {
   private readonly tokenProjection: Linear;

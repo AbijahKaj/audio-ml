@@ -1,5 +1,5 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { Dtype, TensorHandle } from '../compute/types';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { Dtype, TensorHandle } from '../compute/types.js';
 
 export interface SafeTensorHeaderEntry {
   dtype: string;

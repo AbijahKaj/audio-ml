@@ -1,7 +1,7 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { JointWeights } from '../model/WeightMapper';
-import { Linear } from '../encoder/Linear';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { JointWeights } from '../model/WeightMapper.js';
+import { Linear } from '../encoder/Linear.js';
 
 export class JointNetwork {
   protected readonly encoderProjection: Linear;

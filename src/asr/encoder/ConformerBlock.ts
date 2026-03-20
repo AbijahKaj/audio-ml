@@ -1,10 +1,10 @@
-import { ComputeScope } from '../compute/Scope';
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { ConformerLayerWeights } from '../model/WeightMapper';
-import { ConvModule } from './ConvModule';
-import { FeedForward } from './FeedForward';
-import { MultiHeadAttention } from './MultiHeadAttention';
+import { ComputeScope } from '../compute/Scope.js';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { ConformerLayerWeights } from '../model/WeightMapper.js';
+import { ConvModule } from './ConvModule.js';
+import { FeedForward } from './FeedForward.js';
+import { MultiHeadAttention } from './MultiHeadAttention.js';
 
 export class ConformerBlock {
   private readonly ffn1: FeedForward;

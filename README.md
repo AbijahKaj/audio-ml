@@ -54,7 +54,7 @@ const features = mfcc.analyzeFrame(pcmFrame);   // number[]
 Higher-level tools built on top of the analyzers. Import from `audio-ml/applications`. All applications extend `BaseApplication` with an event-driven API: call `processFrame()` per audio frame, listen for events.
 
 ```typescript
-import { VAD, AudioDenoiser, VoicemailBeepDetector } from 'audio-ml/applications';
+import { VAD, AudioDenoiser, VoicemailBeepDetector, SpeechRecognizer } from 'audio-ml/applications';
 ```
 
 ### Voice Activity Detection (VAD)
@@ -105,9 +105,39 @@ detector.on('beep-detected', ({ frequency, duration, confidence }) => {
 detector.processFrame(pcm);
 ```
 
+### Speech Recognizer
+
+Runs real-model speech recognition in Node.js and the browser. The default working runtime uses Transformers.js with a browser-compatible ASR model, while the FastConformer internals remain available under `audio-ml/asr` for advanced model-loading work.
+
+```typescript
+import { SpeechRecognizer } from 'audio-ml/applications';
+
+const recognizer = new SpeechRecognizer({
+  provider: 'transformers-js',
+  modelId: 'Xenova/wav2vec2-base-960h',
+  sampleRate: 44100,
+});
+
+await recognizer.load();
+const result = await recognizer.transcribe(audioFloat32Array);
+console.log(result.text);
+```
+
+For streaming:
+
+```typescript
+recognizer.on('partial', ({ text }) => console.log('Partial:', text));
+recognizer.on('final', ({ text }) => console.log('Final:', text));
+
+audioInput.on('pcm-data', (pcm) => {
+  recognizer.processFrame(pcm);
+});
+```
+
 ## Use Cases
 
 - **Speech recognition**: MFCC and PLP for acoustic modeling, Spectral features for phone classification
+- **ASR prototyping**: `SpeechRecognizer` for real-model browser/Node transcription, or `audio-ml/asr` for lower-level FastConformer and model-loading primitives
 - **Speaker identification**: Voiceprint extraction via MFCC, LPC, and Spectral Centroid/Bandwidth
 - **Voice activity detection**: VAD application, or build your own with RMSE, ZCR, and Spectral Flatness
 - **Noise reduction**: AudioDenoiser application for real-time spectral subtraction
@@ -128,7 +158,7 @@ detector.processFrame(pcm);
 cd demo && yarn install && yarn dev
 ```
 
-The demo includes live visualizations of all 16 analyzers plus interactive pages for each application.
+The demo includes live visualizations of all 16 analyzers plus interactive pages for each application, including a speech recognizer page with a built-in sample transcription path.
 
 ## Contributing
 

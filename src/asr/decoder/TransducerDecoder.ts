@@ -1,6 +1,6 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { FastConformerConfig } from '../model/ModelConfig';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { FastConformerConfig } from '../model/ModelConfig.js';
 
 export abstract class TransducerDecoder {
   protected readonly blankId = 0;

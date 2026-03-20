@@ -3,9 +3,9 @@
  * Detects voicemail beeps and tones using frequency analysis
  */
 
-import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication';
-import { type BeepDetectionResult } from '../base/types';
-import { FFTAnalyzer } from '../../analysis/FFTAnalyzer';
+import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication.js';
+import { type BeepDetectionResult } from '../base/types.js';
+import { FFTAnalyzer } from '../../analysis/FFTAnalyzer.js';
 
 export interface FrequencyRange {
   min: number;

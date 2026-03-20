@@ -1,7 +1,7 @@
-import { MelSpectrogramAnalyzer } from '../../analysis/MelSpectrogramAnalyzer';
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { FastConformerConfig } from '../model/ModelConfig';
+import { MelSpectrogramAnalyzer } from '../../analysis/MelSpectrogramAnalyzer.js';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { FastConformerConfig } from '../model/ModelConfig.js';
 
 function nextPowerOfTwo(value: number): number {
   return 2 ** Math.ceil(Math.log2(value));

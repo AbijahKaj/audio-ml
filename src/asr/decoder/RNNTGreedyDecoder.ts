@@ -1,9 +1,9 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { FastConformerConfig } from '../model/ModelConfig';
-import { PredictionNetwork } from './PredictionNetwork';
-import { RNNTJointNetwork } from './RNNTJointNetwork';
-import { TransducerDecoder } from './TransducerDecoder';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { FastConformerConfig } from '../model/ModelConfig.js';
+import { PredictionNetwork } from './PredictionNetwork.js';
+import { RNNTJointNetwork } from './RNNTJointNetwork.js';
+import { TransducerDecoder } from './TransducerDecoder.js';
 
 export class RNNTGreedyDecoder extends TransducerDecoder {
   constructor(

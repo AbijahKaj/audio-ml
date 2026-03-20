@@ -1,6 +1,6 @@
-import type { ComputeBackend } from '../compute/Backend';
-import type { TensorHandle } from '../compute/types';
-import type { LinearWeightPair } from '../model/WeightMapper';
+import type { ComputeBackend } from '../compute/Backend.js';
+import type { TensorHandle } from '../compute/types.js';
+import type { LinearWeightPair } from '../model/WeightMapper.js';
 
 export class Linear {
   constructor(
