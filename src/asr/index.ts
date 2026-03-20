@@ -22,7 +22,7 @@ export { Resampler } from './features/Resampler';
 export { SentencePieceDecoder } from './text/SentencePieceDecoder';
 
 // Compute
-export { TfjsBackend } from './compute/TfjsBackend';
+export { TfjsBackend, type TfjsBackendName } from './compute/TfjsBackend';
 export type { ComputeBackend } from './compute/Backend';
 export { ComputeScope } from './compute/ComputeScope';
 export type { TensorHandle, Shape, Dtype } from './compute/types';

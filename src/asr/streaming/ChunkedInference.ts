@@ -1,9 +1,10 @@
 import type { ComputeBackend } from '../compute/Backend';
 import type { FastConformerConfig } from '../model/ModelConfig';
 import { FeaturePipeline } from '../features/FeaturePipeline';
-import { FastConformerEncoder } from '../encoder/FastConformerEncoder';
+import { FastConformerEncoder, type StreamingEncoderState } from '../encoder/FastConformerEncoder';
 import type { RNNTGreedyDecoder } from '../decoder/RNNTGreedyDecoder';
 import type { TDTGreedyDecoder } from '../decoder/TDTGreedyDecoder';
+import type { PredictionState } from '../decoder/PredictionNetwork';
 import { SentencePieceDecoder } from '../text/SentencePieceDecoder';
 import { Resampler } from '../features/Resampler';
 
@@ -23,14 +24,22 @@ export interface ChunkedInferenceConfig {
 
 interface StreamingState {
   audioBuffer: Float32Array;
-  processedAudio: Float32Array | null;
+  encoderState: StreamingEncoderState | null;
+  decoderState: PredictionState | null;
+  lastToken: number;
+  tdtFrameOffset: number;
   allTokens: number[];
-  totalAudioProcessed: number;
 }
 
 /**
- * Chunked streaming inference engine.
- * Buffers incoming PCM, extracts features in chunks, runs encoder + decoder incrementally.
+ * Cache-aware chunked streaming inference engine.
+ *
+ * Each chunk only runs the encoder on NEW frames (using cached KV + conv
+ * states from previous chunks). The decoder continues from its previous
+ * LSTM state + last emitted token, so no work is repeated.
+ *
+ * Complexity is O(chunk_size) per step, not O(total_audio) like the naive
+ * re-encode approach.
  */
 export class ChunkedInference {
   private backend: ComputeBackend;
@@ -72,17 +81,12 @@ export class ChunkedInference {
     this.state = this.createInitialState();
   }
 
-  /**
-   * Feed PCM audio data. Returns partial results when enough audio has accumulated.
-   */
   async feedAudio(pcm: Float32Array): Promise<StreamingResult | null> {
-    // Append to buffer
     const newBuffer = new Float32Array(this.state.audioBuffer.length + pcm.length);
     newBuffer.set(this.state.audioBuffer);
     newBuffer.set(pcm, this.state.audioBuffer.length);
     this.state.audioBuffer = newBuffer;
 
-    // Process chunks when we have enough audio
     if (this.state.audioBuffer.length < this.chunkSizeSamples) {
       return null;
     }
@@ -90,15 +94,10 @@ export class ChunkedInference {
     return this.processChunk();
   }
 
-  /**
-   * Force processing of remaining audio and return final result.
-   */
   async flush(): Promise<StreamingResult> {
     if (this.state.audioBuffer.length > 0) {
-      const result = await this.forceProcessRemaining();
-      if (result) {
-        return { ...result, isFinal: true };
-      }
+      const result = await this.processRemaining();
+      if (result) return { ...result, isFinal: true };
     }
 
     return {
@@ -110,10 +109,8 @@ export class ChunkedInference {
     };
   }
 
-  /**
-   * Reset all streaming state for a new utterance.
-   */
   reset(): void {
+    this.disposeState();
     this.state = this.createInitialState();
   }
 
@@ -128,85 +125,45 @@ export class ChunkedInference {
   private async processChunk(): Promise<StreamingResult | null> {
     const start = performance.now();
 
-    // Extract one chunk worth of audio but keep the full accumulated audio
-    const chunkAudio = new Float32Array(this.chunkSizeSamples);
-    chunkAudio.set(this.state.audioBuffer.subarray(0, this.chunkSizeSamples));
-    const remaining = new Float32Array(this.state.audioBuffer.length - this.chunkSizeSamples);
-    remaining.set(this.state.audioBuffer.subarray(this.chunkSizeSamples));
-    this.state.audioBuffer = remaining;
+    const chunkAudio = this.state.audioBuffer.subarray(0, this.chunkSizeSamples);
+    this.state.audioBuffer = this.state.audioBuffer.subarray(this.chunkSizeSamples);
 
-    // Accumulate all processed audio for re-encoding
-    const newProcessed = new Float32Array(this.state.totalAudioProcessed + chunkAudio.length);
-    if (this.state.processedAudio) {
-      newProcessed.set(this.state.processedAudio);
-    }
-    newProcessed.set(chunkAudio, this.state.totalAudioProcessed);
-    this.state.processedAudio = newProcessed;
-    this.state.totalAudioProcessed += chunkAudio.length;
-
-    let audio: Float32Array = this.state.processedAudio;
-    if (this.resampler) {
-      audio = this.resampler.resample(audio);
-    }
-
-    // Run full offline pipeline on all accumulated audio
-    const mel = this.featurePipeline.extractFeatures(audio);
-    const encoded = this.encoder.forward(mel);
-    const tokenIds = await this.decoder.decode(encoded);
-    this.state.allTokens = tokenIds;
-
-    this.backend.dispose(mel);
+    const encoded = this.encodeChunk(chunkAudio);
+    const newTokens = await this.decodeIncremental(encoded);
     this.backend.dispose(encoded);
 
-    const latencyMs = performance.now() - start;
+    if (newTokens.length > 0) {
+      this.state.allTokens.push(...newTokens);
+    }
 
     return {
       text: this.tokenizer.decode(this.state.allTokens),
       isFinal: false,
       isPartial: true,
-      latencyMs,
+      latencyMs: performance.now() - start,
       decoderType: this.config.decoderType,
     };
   }
 
-  private async forceProcessRemaining(): Promise<StreamingResult | null> {
+  private async processRemaining(): Promise<StreamingResult | null> {
     const start = performance.now();
 
-    // Add remaining buffer to processed audio
-    if (this.state.audioBuffer.length > 0) {
-      const newProcessed = new Float32Array(this.state.totalAudioProcessed + this.state.audioBuffer.length);
-      if (this.state.processedAudio) {
-        newProcessed.set(this.state.processedAudio);
-      }
-      newProcessed.set(this.state.audioBuffer, this.state.totalAudioProcessed);
-      this.state.processedAudio = newProcessed;
-      this.state.totalAudioProcessed += this.state.audioBuffer.length;
-      this.state.audioBuffer = new Float32Array(0);
-    }
+    let audio = new Float32Array(this.state.audioBuffer);
+    this.state.audioBuffer = new Float32Array(0);
 
-    if (!this.state.processedAudio || this.state.totalAudioProcessed === 0) {
-      return null;
-    }
-
-    let audio: Float32Array = this.state.processedAudio;
-    if (this.resampler) {
-      audio = this.resampler.resample(audio);
-    }
-
-    const minSamples = this.featurePipeline.frameLength;
-    if (audio.length < minSamples) {
-      const padded = new Float32Array(minSamples);
+    if (audio.length < this.featurePipeline.frameLength) {
+      const padded = new Float32Array(this.featurePipeline.frameLength);
       padded.set(audio);
       audio = padded;
     }
 
-    const mel = this.featurePipeline.extractFeatures(audio);
-    const encoded = this.encoder.forward(mel);
-    const tokenIds = await this.decoder.decode(encoded);
-    this.state.allTokens = tokenIds;
-
-    this.backend.dispose(mel);
+    const encoded = this.encodeChunk(audio);
+    const newTokens = await this.decodeIncremental(encoded);
     this.backend.dispose(encoded);
+
+    if (newTokens.length > 0) {
+      this.state.allTokens.push(...newTokens);
+    }
 
     return {
       text: this.tokenizer.decode(this.state.allTokens),
@@ -217,12 +174,85 @@ export class ChunkedInference {
     };
   }
 
+  /**
+   * Extract mel features from a chunk and run the encoder with cached state.
+   * Only the new frames are attended to; previous frames are in the KV cache.
+   */
+  private encodeChunk(chunkPcm: Float32Array): TensorHandle {
+    let audio = chunkPcm;
+    if (this.resampler) {
+      audio = this.resampler.resample(audio);
+    }
+
+    const mel = this.featurePipeline.extractFeatures(audio);
+    const { output, newState } = this.encoder.forwardStreaming(mel, this.state.encoderState);
+    this.backend.dispose(mel);
+
+    this.state.encoderState = newState;
+    return output;
+  }
+
+  /**
+   * Run the decoder only on new encoder frames, continuing from
+   * the previous prediction state and last emitted token.
+   */
+  private async decodeIncremental(encoderOutput: TensorHandle): Promise<number[]> {
+    const T = this.backend.getShape(encoderOutput)[1] as number;
+    if (T === 0) return [];
+
+    if (this.isTDT(this.decoder)) {
+      const result = await this.decoder.decodeStreaming(
+        encoderOutput,
+        this.state.decoderState,
+        this.state.lastToken,
+        this.state.tdtFrameOffset,
+      );
+      this.state.decoderState = result.newState;
+      this.state.lastToken = result.newLastToken;
+      this.state.tdtFrameOffset = result.newFrameOffset;
+      return result.tokens;
+    }
+
+    const result = await (this.decoder as RNNTGreedyDecoder).decodeStreaming(
+      encoderOutput,
+      this.state.decoderState,
+      this.state.lastToken,
+    );
+    this.state.decoderState = result.newState;
+    this.state.lastToken = result.newLastToken;
+    return result.tokens;
+  }
+
+  private isTDT(_decoder: RNNTGreedyDecoder | TDTGreedyDecoder): _decoder is TDTGreedyDecoder {
+    return this.config.decoderType === 'tdt';
+  }
+
+  private disposeState(): void {
+    if (this.state.decoderState) {
+      for (const h of this.state.decoderState.h) this.backend.dispose(h);
+      for (const c of this.state.decoderState.c) this.backend.dispose(c);
+    }
+    if (this.state.encoderState) {
+      for (const { k, v } of this.state.encoderState.cachedKV) {
+        this.backend.dispose(k);
+        this.backend.dispose(v);
+      }
+      for (const s of this.state.encoderState.convStates) {
+        this.backend.dispose(s);
+      }
+    }
+  }
+
   private createInitialState(): StreamingState {
     return {
       audioBuffer: new Float32Array(0),
-      processedAudio: null,
+      encoderState: null,
+      decoderState: null,
+      lastToken: 0,
+      tdtFrameOffset: 0,
       allTokens: [],
-      totalAudioProcessed: 0,
     };
   }
 }
+
+type TensorHandle = import('../compute/types').TensorHandle;

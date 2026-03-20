@@ -1,5 +1,5 @@
 import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication';
-import { TfjsBackend } from '../../asr/compute/TfjsBackend';
+import { TfjsBackend, type TfjsBackendName } from '../../asr/compute/TfjsBackend';
 import type { ComputeBackend } from '../../asr/compute/Backend';
 import { FeaturePipeline } from '../../asr/features/FeaturePipeline';
 import { Resampler } from '../../asr/features/Resampler';
@@ -16,7 +16,7 @@ export interface SpeechRecognizerConfig extends ApplicationConfig {
   modelPath: string;
   configPath: string;
   vocabPath: string;
-  backend?: 'wasm' | 'webgpu' | 'webgl' | 'cpu';
+  backend?: TfjsBackendName;
   inputSampleRate?: number;
   streaming?: boolean;
   chunkSizeMs?: number;
@@ -58,7 +58,7 @@ export class SpeechRecognizer extends BaseApplication {
   private modelPath: string;
   private configPath: string;
   private vocabPath: string;
-  private backendType: 'wasm' | 'webgpu' | 'webgl' | 'cpu';
+  private backendType: TfjsBackendName;
   private inputSampleRate: number;
 
   constructor(config: SpeechRecognizerConfig) {

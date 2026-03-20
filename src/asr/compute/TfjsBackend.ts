@@ -2,12 +2,21 @@ import * as tf from '@tensorflow/tfjs';
 import type { ComputeBackend } from './Backend';
 import type { TensorHandle, Shape } from './types';
 
+export type TfjsBackendName = 'wasm' | 'webgpu' | 'webgl' | 'cpu';
+
 function T(h: TensorHandle): tf.Tensor {
   return h as tf.Tensor;
 }
 
 export class TfjsBackend implements ComputeBackend {
-  async init(backend: 'wasm' | 'webgpu' | 'webgl' | 'cpu' = 'cpu'): Promise<void> {
+  async init(backend: TfjsBackendName = 'cpu'): Promise<void> {
+    if (backend === 'wasm') {
+      const wasm = await import('@tensorflow/tfjs-backend-wasm');
+      const version = tf.version['tfjs-core'];
+      wasm.setWasmPaths(
+        `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`
+      );
+    }
     await tf.setBackend(backend);
     await tf.ready();
   }
