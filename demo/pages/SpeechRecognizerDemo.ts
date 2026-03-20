@@ -42,6 +42,8 @@ function hfModel(repo: string): { config: string; weights: string; vocab: string
 }
 
 const HF_PARAKEET_TDT_110M = hfModel('AbijahKaj/parakeet-tdt-110m-web');
+const HF_PARAKEET_RNNT_120M = hfModel('AbijahKaj/parakeet-rnnt-120m-web');
+const HF_FASTCONFORMER_TDT_LARGE = hfModel('AbijahKaj/fastconformer-tdt-large-web');
 
 const MODELS: Record<string, ModelSpec> = {
   parakeetTdt110m: {
@@ -51,6 +53,22 @@ const MODELS: Record<string, ModelSpec> = {
     vocabUrl: HF_PARAKEET_TDT_110M.vocab,
     description: 'English, 110M params, TDT decoder — fast, browser-optimized',
     sizeMB: 220,
+  },
+  parakeetRnnt120m: {
+    label: 'Parakeet RNNT 120M (Streaming)',
+    configUrl: HF_PARAKEET_RNNT_120M.config,
+    weightsUrl: HF_PARAKEET_RNNT_120M.weights,
+    vocabUrl: HF_PARAKEET_RNNT_120M.vocab,
+    description: 'English, 120M params, RNNT decoder — streaming-optimized with end-of-utterance',
+    sizeMB: 220,
+  },
+  fastconformerTdtLarge: {
+    label: 'FastConformer TDT Large',
+    configUrl: HF_FASTCONFORMER_TDT_LARGE.config,
+    weightsUrl: HF_FASTCONFORMER_TDT_LARGE.weights,
+    vocabUrl: HF_FASTCONFORMER_TDT_LARGE.vocab,
+    description: 'English, 115M params, TDT decoder — high accuracy offline model',
+    sizeMB: 218,
   },
 };
 
@@ -142,6 +160,17 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
 
   // model loading section
   const loadSection = el('div', 'asr-load-section');
+
+  const modelSelect = document.createElement('select');
+  modelSelect.className = 'asr-select';
+  for (const [key, spec] of Object.entries(MODELS)) {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = `${spec.label} (~${spec.sizeMB} MB)`;
+    opt.title = spec.description;
+    modelSelect.appendChild(opt);
+  }
+
   const backendSelect = document.createElement('select');
   backendSelect.className = 'asr-select';
   for (const [value, label] of [['wasm', 'WASM (CPU)'], ['webgpu', 'WebGPU'], ['webgl', 'WebGL']] as const) {
@@ -163,7 +192,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
   const statusLabel = el('div', 'asr-status');
   statusLabel.textContent = 'Model not loaded';
 
-  loadSection.append(backendSelect, loadBtn, progressBar, statusLabel);
+  loadSection.append(modelSelect, backendSelect, loadBtn, progressBar, statusLabel);
   wrapper.appendChild(loadSection);
 
   // audio input section (hidden until model loaded)
@@ -236,7 +265,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     loadBtn.textContent = 'Loading...';
 
     try {
-      const spec = MODELS.parakeetTdt110m;
+      const spec = MODELS[modelSelect.value];
       const backend = backendSelect.value as 'wasm' | 'webgpu' | 'webgl';
 
       setStatus('Downloading config & vocab...');
@@ -285,6 +314,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     audioSection.style.display = '';
     transcriptSection.style.display = '';
     loadBtn.style.display = 'none';
+    modelSelect.style.display = 'none';
     backendSelect.style.display = 'none';
 
     audioInput = new AudioInput(INPUT_SAMPLE_RATE);
