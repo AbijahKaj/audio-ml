@@ -17,15 +17,40 @@ interface ModelSpec {
   weightsUrl: string;
   vocabUrl: string;
   description: string;
+  sizeMB: number;
 }
 
+/**
+ * HuggingFace-hosted models.
+ * Converted from NeMo checkpoints via tools/export_nemo_to_safetensors.py
+ *
+ * To use your own model, run the export script and push to HF:
+ *   python tools/export_nemo_to_safetensors.py \
+ *       --model nvidia/parakeet-tdt_ctc-110m \
+ *       --output-dir exported/parakeet-tdt-110m
+ *   huggingface-cli upload YOUR_USER/parakeet-tdt-110m-web exported/parakeet-tdt-110m .
+ *
+ * Then add the HF resolve URLs below.
+ */
+function hfModel(repo: string): { config: string; weights: string; vocab: string } {
+  const base = `https://huggingface.co/${repo}/resolve/main`;
+  return {
+    config: `${base}/model_config.json`,
+    weights: `${base}/model.safetensors`,
+    vocab: `${base}/vocab.json`,
+  };
+}
+
+const HF_PARAKEET_TDT_110M = hfModel('AbijahKaj/parakeet-tdt-110m-web');
+
 const MODELS: Record<string, ModelSpec> = {
-  parakeet120m: {
-    label: 'Parakeet 120 M (RNNT)',
-    configUrl: '/models/parakeet_120m/model_config.json',
-    weightsUrl: '/models/parakeet_120m/model.safetensors',
-    vocabUrl: '/models/parakeet_120m/vocab.json',
-    description: 'English-only, 120 M params — lightweight, ideal for browser',
+  parakeetTdt110m: {
+    label: 'Parakeet TDT 110M',
+    configUrl: HF_PARAKEET_TDT_110M.config,
+    weightsUrl: HF_PARAKEET_TDT_110M.weights,
+    vocabUrl: HF_PARAKEET_TDT_110M.vocab,
+    description: 'English, 110M params, TDT decoder — fast, browser-optimized',
+    sizeMB: 220,
   },
 };
 
@@ -42,6 +67,12 @@ async function fetchCached(url: string, onProgress?: (pct: number) => void): Pro
 
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
+  const ct = response.headers.get('content-type') ?? '';
+  if (ct.includes('text/html')) {
+    throw new Error(
+      `Model file not found at ${url} — check HuggingFace repo URL or run tools/export_nemo_to_safetensors.py`,
+    );
+  }
 
   const contentLength = Number(response.headers.get('content-length') ?? 0);
   const reader = response.body?.getReader();
@@ -83,6 +114,11 @@ async function fetchTextCached(url: string): Promise<string> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
   const text = await response.text();
+  if (text.trimStart().startsWith('<')) {
+    throw new Error(
+      `Model file not found at ${url} — check HuggingFace repo URL or run tools/export_nemo_to_safetensors.py`,
+    );
+  }
   await cache.put(url, new Response(text, { headers: { 'Content-Type': 'application/json' } }));
   return text;
 }
@@ -200,7 +236,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     loadBtn.textContent = 'Loading...';
 
     try {
-      const spec = MODELS.parakeet120m;
+      const spec = MODELS.parakeetTdt110m;
       const backend = backendSelect.value as 'wasm' | 'webgpu' | 'webgl';
 
       setStatus('Downloading config & vocab...');
@@ -211,7 +247,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
         fetchTextCached(spec.vocabUrl),
       ]);
 
-      setStatus('Downloading model weights...');
+      setStatus(`Downloading model weights (~${spec.sizeMB} MB)...`);
       const modelBuf = await fetchCached(spec.weightsUrl, pct => setProgress(pct * 0.9));
 
       if (destroyed) return;
@@ -225,10 +261,10 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
         configPath: spec.configUrl,
         vocabPath: spec.vocabUrl,
         backend,
+        backendOptions: { wasmPathPrefix: '/tfjs-wasm/' },
         inputSampleRate: INPUT_SAMPLE_RATE,
         streaming: true,
         chunkSizeMs: 320,
-        fftSize: 512,
       });
 
       await recognizer.loadFromBuffers(modelBuf, configJson, vocabJson);

@@ -4,19 +4,37 @@ import type { TensorHandle, Shape } from './types';
 
 export type TfjsBackendName = 'wasm' | 'webgpu' | 'webgl' | 'cpu';
 
+export interface TfjsInitOptions {
+  /**
+   * Override where the WASM backend looks for its .wasm binaries.
+   * In a Vite app this would typically be '/tfjs-wasm/' served by the
+   * tfjsWasm plugin; in Node it can point to a local directory.
+   * Falls back to the jsdelivr CDN when not set.
+   */
+  wasmPathPrefix?: string;
+}
+
 function T(h: TensorHandle): tf.Tensor {
   return h as tf.Tensor;
 }
 
 export class TfjsBackend implements ComputeBackend {
-  async init(backend: TfjsBackendName = 'cpu'): Promise<void> {
+  async init(
+    backend: TfjsBackendName = 'cpu',
+    options: TfjsInitOptions = {},
+  ): Promise<void> {
     if (backend === 'wasm') {
       const wasm = await import('@tensorflow/tfjs-backend-wasm');
-      const version = tf.version['tfjs-core'];
-      wasm.setWasmPaths(
-        `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`
-      );
+      const prefix = options.wasmPathPrefix
+        ?? `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${tf.version['tfjs-core']}/dist/`;
+      wasm.setWasmPaths(prefix);
+      // Disable threaded WASM — the worker script uses CommonJS which is
+      // incompatible with Vite / native ESM module loaders.
+      wasm.setThreadsCount(0);
+    } else if (backend === 'webgpu') {
+      await import('@tensorflow/tfjs-backend-webgpu');
     }
+    // cpu + webgl are already registered by @tensorflow/tfjs
     await tf.setBackend(backend);
     await tf.ready();
   }

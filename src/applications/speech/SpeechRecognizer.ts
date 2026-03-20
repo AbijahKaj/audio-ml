@@ -1,5 +1,5 @@
 import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication';
-import { TfjsBackend, type TfjsBackendName } from '../../asr/compute/TfjsBackend';
+import { TfjsBackend, type TfjsBackendName, type TfjsInitOptions } from '../../asr/compute/TfjsBackend';
 import type { ComputeBackend } from '../../asr/compute/Backend';
 import { FeaturePipeline } from '../../asr/features/FeaturePipeline';
 import { Resampler } from '../../asr/features/Resampler';
@@ -17,6 +17,7 @@ export interface SpeechRecognizerConfig extends ApplicationConfig {
   configPath: string;
   vocabPath: string;
   backend?: TfjsBackendName;
+  backendOptions?: TfjsInitOptions;
   inputSampleRate?: number;
   streaming?: boolean;
   chunkSizeMs?: number;
@@ -59,6 +60,7 @@ export class SpeechRecognizer extends BaseApplication {
   private configPath: string;
   private vocabPath: string;
   private backendType: TfjsBackendName;
+  private backendOptions: TfjsInitOptions;
   private inputSampleRate: number;
 
   constructor(config: SpeechRecognizerConfig) {
@@ -67,6 +69,7 @@ export class SpeechRecognizer extends BaseApplication {
     this.configPath = config.configPath;
     this.vocabPath = config.vocabPath;
     this.backendType = config.backend ?? 'cpu';
+    this.backendOptions = config.backendOptions ?? {};
     this.inputSampleRate = config.inputSampleRate ?? config.sampleRate;
     this.streamingEnabled = config.streaming ?? false;
     this.chunkSizeMs = config.chunkSizeMs ?? 160;
@@ -76,7 +79,7 @@ export class SpeechRecognizer extends BaseApplication {
 
   async load(): Promise<void> {
     const tfjsBackend = new TfjsBackend();
-    await tfjsBackend.init(this.backendType);
+    await tfjsBackend.init(this.backendType, this.backendOptions);
     this.backend = tfjsBackend;
 
     const configJson = await fetchText(this.configPath);
@@ -107,7 +110,7 @@ export class SpeechRecognizer extends BaseApplication {
     vocabJson: string,
   ): Promise<void> {
     const tfjsBackend = new TfjsBackend();
-    await tfjsBackend.init(this.backendType);
+    await tfjsBackend.init(this.backendType, this.backendOptions);
     this.backend = tfjsBackend;
 
     this.config = parseModelConfig(configJson);
