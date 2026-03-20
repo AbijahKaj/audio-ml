@@ -1,0 +1,9 @@
+{
+  "file": "libri_1.wav",
+  "reference": "NOR IS MISTER QUILTER'S MANNER LESS INTERESTING THAN HIS MATTER",
+  "nemo_output": "Nor is mister Quilter's manner less interesting than his matter.",
+  "duration_s": 4.815,
+  "nemo_avg_ms": 129.1968027750651,
+  "nemo_std_ms": 3.361710207578086,
+  "nemo_rtf": 0.026832150109047787
+}

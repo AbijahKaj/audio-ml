@@ -1,0 +1,29 @@
+[
+  {
+    "file": "libri_0.wav",
+    "reference": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL",
+    "nemo_output": "mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+    "duration_s": 5.855,
+    "nemo_avg_ms": 155.7157834370931,
+    "nemo_std_ms": 1.0523150652346402,
+    "nemo_rtf": 0.026595351569102154
+  },
+  {
+    "file": "libri_1.wav",
+    "reference": "NOR IS MISTER QUILTER'S MANNER LESS INTERESTING THAN HIS MATTER",
+    "nemo_output": "Nor is mister Quilter's manner less interesting than his matter.",
+    "duration_s": 4.815,
+    "nemo_avg_ms": 129.1968027750651,
+    "nemo_std_ms": 3.361710207578086,
+    "nemo_rtf": 0.026832150109047787
+  },
+  {
+    "file": "libri_2.wav",
+    "reference": "HE TELLS US THAT AT THIS FESTIVE SEASON OF THE YEAR WITH CHRISTMAS AND ROAST BEEF LOOMING BEFORE US SIMILES DRAWN FROM EATING AND ITS RESULTS OCCUR MOST READILY TO THE MIND",
+    "nemo_output": "He tells us that at this festive season of the year with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind.",
+    "duration_s": 12.485,
+    "nemo_avg_ms": 228.24406623840332,
+    "nemo_std_ms": 2.326574212893067,
+    "nemo_rtf": 0.01828146305473795
+  }
+]

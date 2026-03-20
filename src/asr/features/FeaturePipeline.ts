@@ -13,7 +13,7 @@ export class FeaturePipeline {
   private fft: FFT;
   private melFilters: Float32Array[];
   private hannWindow: Float32Array;
-  private preEmphasis: number = 0.97;
+  private dither: number = 1e-5;
 
   constructor(config: FastConformerConfig, backend: ComputeBackend) {
     this.backend = backend;
@@ -31,8 +31,8 @@ export class FeaturePipeline {
   }
 
   extractFeatures(audio: Float32Array): TensorHandle {
-    const emphasized = this.applyPreEmphasis(audio);
-    const frames = this.frameSignal(emphasized);
+    const dithered = this.applyDither(audio);
+    const frames = this.frameSignal(dithered);
     const numFrames = frames.length;
     const melFeatures = new Float32Array(numFrames * this.numMelBands);
 
@@ -82,11 +82,11 @@ export class FeaturePipeline {
     return this.numMelBands;
   }
 
-  private applyPreEmphasis(signal: Float32Array): Float32Array {
+  private applyDither(signal: Float32Array): Float32Array {
+    if (this.dither <= 0) return signal;
     const output = new Float32Array(signal.length);
-    output[0] = signal[0];
-    for (let i = 1; i < signal.length; i++) {
-      output[i] = signal[i] - this.preEmphasis * signal[i - 1];
+    for (let i = 0; i < signal.length; i++) {
+      output[i] = signal[i] + this.dither * (Math.random() * 2 - 1);
     }
     return output;
   }
@@ -117,15 +117,21 @@ export class FeaturePipeline {
     return window;
   }
 
+  /**
+   * Per-feature normalization: normalize each mel band independently
+   * to mean=0, std=1 across the time dimension.
+   */
   private normalizeFeatures(features: TensorHandle): TensorHandle {
     return this.backend.tidy(() => {
-      const mean = this.backend.mean(features, [1], true);
+      // features: [B, T, mel_bands]
+      // Compute mean and variance per feature band (across time dim=1)
+      const mean = this.backend.mean(features, [1], true); // [B, 1, mel_bands]
       const centered = this.backend.sub(features, mean);
       const variance = this.backend.mean(
         this.backend.mul(centered, centered),
         [1],
         true
-      );
+      ); // [B, 1, mel_bands]
       const std = this.backend.sqrt(this.backend.add(variance, this.backend.scalarTensor(1e-5)));
       return this.backend.div(centered, std);
     });
