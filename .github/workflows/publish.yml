@@ -1,3 +1,14 @@
+# Publish `audio-ml` and `@audio-ml/asr` to npm (OIDC trusted publishing).
+#
+# Versioning model:
+# - `audio-ml` is the release driver for git tags: tag `vX.Y.Z` must match the
+#   `version` field in the root `package.json` at the tagged commit.
+# - `@audio-ml/asr` uses its own `version` in `packages/asr/package.json`. Bump
+#   it when the ASR package changes. If that version is already on npm, the
+#   ASR publish step is skipped so an audio-ml-only release still succeeds.
+#
+# Manual runs (`workflow_dispatch`) publish whatever versions are in those files.
+
 name: Publish to npm
 
 on:
@@ -33,43 +44,49 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Build packages
-        run: yarn build:all
-
       - name: Determine version and tag
         id: version-info
         run: |
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            # If triggered by tag push, use the tag (remove 'refs/tags/' prefix and 'v' prefix)
             TAG_NAME="${{ github.ref_name }}"
-            VERSION="${TAG_NAME#v}"  # Remove 'v' prefix if present
-            echo "Using existing tag: $TAG_NAME"
+            VERSION="${TAG_NAME#v}"
+            echo "Using tag: $TAG_NAME → version $VERSION"
           else
-            # If triggered manually, get version from package.json
             VERSION=$(node -p "require('./package.json').version")
             TAG_NAME="v$VERSION"
-            echo "Using version from package.json: $VERSION"
+            echo "Manual run: version from root package.json: $VERSION"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
 
       - name: Publish audio-ml to npm
         run: npm publish --access public
-        # OIDC trusted publishing handles auth automatically (requires Node 22.14+ / npm 11.5+)
-        # Provenance attestation is generated automatically when publishing via trusted publishing
 
       - name: Publish @audio-ml/asr to npm
-        run: npm publish --access public
+        id: publish-asr
         working-directory: packages/asr
+        run: |
+          ASR_VER=$(node -p "require('./package.json').version")
+          echo "asr_version=$ASR_VER" >> "$GITHUB_OUTPUT"
+          set +e
+          PUBLISHED=$(npm view "@audio-ml/asr@${ASR_VER}" version 2>/dev/null)
+          set -e
+          if [ "$PUBLISHED" = "$ASR_VER" ]; then
+            echo "Skip: @audio-ml/asr@${ASR_VER} is already on npm."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+          else
+            npm publish --access public
+            echo "skipped=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create git tag if it doesn't exist
-        id: create-tag
+        if: github.ref_type != 'tag'
         run: |
           TAG="${{ steps.version-info.outputs.tag }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists (triggered by tag push)"
+            echo "Tag $TAG already exists"
           else
-            echo "Creating tag $TAG after successful npm publish"
+            echo "Creating tag $TAG after successful publish"
             git tag "$TAG"
             git push origin "$TAG"
           fi
@@ -77,9 +94,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
-        run: |
-          gh release create "${{ steps.version-info.outputs.tag }}" \
-            --title "Release ${{ steps.version-info.outputs.tag }}" \
-            --notes "Published to npm as \`audio-ml@${{ steps.version-info.outputs.version }}\` and \`@audio-ml/asr@${{ steps.version-info.outputs.version }}\`"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version-info.outputs.tag }}
+          ROOT_VER: ${{ steps.version-info.outputs.version }}
+          ASR_VER: ${{ steps.publish-asr.outputs.asr_version }}
+          ASR_SKIPPED: ${{ steps.publish-asr.outputs.skipped }}
+        run: |
+          printf -v ROOT_LINE 'Published `audio-ml@%s`' "$ROOT_VER"
+          if [ "$ASR_SKIPPED" = "true" ]; then
+            printf -v ASR_LINE 'Skipped `@audio-ml/asr` (version `%s` already on npm). Bump `packages/asr/package.json` to publish a new ASR release.' "$ASR_VER"
+          else
+            printf -v ASR_LINE 'Published `@audio-ml/asr@%s`' "$ASR_VER"
+          fi
+          gh release create "$TAG" \
+            --title "Release $TAG" \
+            --notes "$(printf '%s\n\n%s' "$ROOT_LINE" "$ASR_LINE")"
