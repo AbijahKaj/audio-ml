@@ -3,7 +3,7 @@
  * compare against NeMo reference, and test streaming.
  */
 import { readFileSync, readdirSync, existsSync } from 'fs';
-import '@tensorflow/tfjs';
+import { createTfjsBackend } from './init-tfjs-backend.mjs';
 import { TfjsBackend } from '../packages/asr/src/compute/TfjsBackend';
 import { loadSafeTensors } from '../packages/asr/src/model/SafeTensorsLoader';
 import { parseModelConfig } from '../packages/asr/src/model/ModelConfig';
@@ -24,8 +24,7 @@ async function main() {
 
   // ── Load model ──
   console.log('Loading model...');
-  const backend = new TfjsBackend();
-  await backend.init('cpu');
+  const backend = await createTfjsBackend(TfjsBackend);
 
   const configJson = readFileSync(`${MODEL_DIR}/model_config.json`, 'utf-8');
   const config = parseModelConfig(configJson);

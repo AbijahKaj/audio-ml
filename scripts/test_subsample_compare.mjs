@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs';
-import '@tensorflow/tfjs';
+import { createTfjsBackend } from './init-tfjs-backend.mjs';
 import { TfjsBackend } from '../packages/asr/src/compute/TfjsBackend';
 import { loadSafeTensors } from '../packages/asr/src/model/SafeTensorsLoader';
 import { parseModelConfig } from '../packages/asr/src/model/ModelConfig';
@@ -7,8 +7,7 @@ import { mapWeights } from '../packages/asr/src/model/WeightMapper';
 import { ConvSubsampling } from '../packages/asr/src/encoder/ConvSubsampling';
 
 async function main() {
-  const backend = new TfjsBackend();
-  await backend.init('cpu');
+  const backend = await createTfjsBackend(TfjsBackend);
 
   const config = parseModelConfig(readFileSync('/workspace/test_model/model_config.json', 'utf-8'));
   const rawWeights = await loadSafeTensors(readFileSync('/workspace/test_model/model.safetensors').buffer, backend);

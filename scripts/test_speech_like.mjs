@@ -3,7 +3,7 @@
  * and also with silence to verify different model behaviors.
  */
 import { readFileSync } from 'fs';
-import '@tensorflow/tfjs';
+import { createTfjsBackend } from './init-tfjs-backend.mjs';
 import { TfjsBackend } from '../packages/asr/src/compute/TfjsBackend';
 import { loadSafeTensors } from '../packages/asr/src/model/SafeTensorsLoader';
 import { parseModelConfig } from '../packages/asr/src/model/ModelConfig';
@@ -42,8 +42,7 @@ async function transcribe(encoder, decoder, tokenizer, featurePipeline, backend,
 async function main() {
   console.log('=== Speech-Like Audio Test ===');
 
-  const backend = new TfjsBackend();
-  await backend.init('cpu');
+  const backend = await createTfjsBackend(TfjsBackend);
 
   const configJson = readFileSync(`${MODEL_DIR}/model_config.json`, 'utf-8');
   const config = parseModelConfig(configJson);

@@ -127,7 +127,7 @@ const asr = new FastConformerASR({
   modelPath: '/models/weights.safetensors',
   configPath: '/models/model_config.json',
   vocabPath: '/models/vocab.json',
-  backend: 'wasm', // or 'cpu', 'webgl', 'webgpu'
+  backend: 'wasm', // browser: also 'cpu', 'webgl', 'webgpu'
   streaming: true,
 });
 
@@ -139,6 +139,8 @@ asr.on('final', (r: ASRResult) => console.log('final', r.text));
 // Per frame (see package exports for batch helpers such as transcribe())
 asr.processFrame(pcmFrame);
 ```
+
+In **Node.js**, install `@tensorflow/tfjs-node` (optional peer) and use `backend: 'tensorflow'` for native acceleration; otherwise use `'cpu'` (pure JS).
 
 The package also exports lower-level pieces (`FastConformerEncoder`, decoders, `FeaturePipeline`, `TfjsBackend`, etc.) if you want to compose your own pipeline.
 

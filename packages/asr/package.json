@@ -34,7 +34,13 @@
     "directory": "packages/asr"
   },
   "peerDependencies": {
+    "@tensorflow/tfjs-node": "^4.22.0",
     "audio-ml": "^1.0.2"
+  },
+  "peerDependenciesMeta": {
+    "@tensorflow/tfjs-node": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@tensorflow/tfjs": "^4.22.0",
@@ -43,6 +49,8 @@
     "fft.js": "^4.0.4"
   },
   "devDependencies": {
+    "@tensorflow/tfjs-node": "4.22.0",
+    "@types/node": "^22.0.0",
     "audio-ml": "file:../..",
     "typescript": "~5.9.3"
   },

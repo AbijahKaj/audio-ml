@@ -3,7 +3,7 @@
  * Tests the full pipeline: SafeTensors → weight mapping → encoder → decoder → text
  */
 import { readFileSync } from 'fs';
-import '@tensorflow/tfjs';
+import { createTfjsBackend } from './init-tfjs-backend.mjs';
 import { TfjsBackend } from '../packages/asr/src/compute/TfjsBackend';
 import { loadSafeTensors } from '../packages/asr/src/model/SafeTensorsLoader';
 import { parseModelConfig } from '../packages/asr/src/model/ModelConfig';
@@ -20,8 +20,7 @@ async function main() {
 
   // Step 1: Initialize backend
   console.log('1. Initializing TF.js backend (CPU)...');
-  const backend = new TfjsBackend();
-  await backend.init('cpu');
+  const backend = await createTfjsBackend(TfjsBackend);
   console.log('   ✓ Backend ready\n');
 
   // Step 2: Load config

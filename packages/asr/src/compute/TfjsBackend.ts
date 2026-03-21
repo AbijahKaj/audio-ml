@@ -2,7 +2,11 @@ import * as tf from '@tensorflow/tfjs';
 import type { ComputeBackend } from './Backend';
 import type { TensorHandle, Shape } from './types';
 
-export type TfjsBackendName = 'wasm' | 'webgpu' | 'webgl' | 'cpu';
+/**
+ * - `tensorflow` — Node.js only: native libtensorflow via `@tensorflow/tfjs-node` (fastest in Node).
+ * - `cpu` — pure JS CPU backend (browser and Node).
+ */
+export type TfjsBackendName = 'wasm' | 'webgpu' | 'webgl' | 'cpu' | 'tensorflow';
 
 export interface TfjsInitOptions {
   /**
@@ -16,6 +20,10 @@ export interface TfjsInitOptions {
 
 function T(h: TensorHandle): tf.Tensor {
   return h as tf.Tensor;
+}
+
+function isNodeRuntime(): boolean {
+  return typeof process !== 'undefined' && process.versions?.node !== undefined;
 }
 
 export class TfjsBackend implements ComputeBackend {
@@ -33,6 +41,11 @@ export class TfjsBackend implements ComputeBackend {
       wasm.setThreadsCount(0);
     } else if (backend === 'webgpu') {
       await import('@tensorflow/tfjs-backend-webgpu');
+    } else if (backend === 'tensorflow') {
+      if (!isNodeRuntime()) {
+        throw new Error('TfjsBackend "tensorflow" is only supported in Node.js (install @tensorflow/tfjs-node).');
+      }
+      await import('@tensorflow/tfjs-node');
     }
     // cpu + webgl are already registered by @tensorflow/tfjs
     await tf.setBackend(backend);

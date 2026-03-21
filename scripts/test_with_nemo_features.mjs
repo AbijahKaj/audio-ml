@@ -3,7 +3,7 @@
  * bypassing the feature pipeline to isolate encoder/decoder correctness.
  */
 import { readFileSync } from 'fs';
-import '@tensorflow/tfjs';
+import { createTfjsBackend } from './init-tfjs-backend.mjs';
 import { TfjsBackend } from '../packages/asr/src/compute/TfjsBackend';
 import { loadSafeTensors } from '../packages/asr/src/model/SafeTensorsLoader';
 import { parseModelConfig } from '../packages/asr/src/model/ModelConfig';
@@ -18,8 +18,7 @@ const AUDIO_DIR = '/workspace/test_audio';
 async function main() {
   console.log('=== Test with NeMo Features (bypass JS feature pipeline) ===\n');
 
-  const backend = new TfjsBackend();
-  await backend.init('cpu');
+  const backend = await createTfjsBackend(TfjsBackend);
 
   const configJson = readFileSync(`${MODEL_DIR}/model_config.json`, 'utf-8');
   const config = parseModelConfig(configJson);
