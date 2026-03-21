@@ -15,6 +15,11 @@ export class FeaturePipeline {
   private hannWindow: Float32Array;
   private dither: number = 1e-5;
 
+  // Running normalization state for streaming
+  private runningSum: Float64Array;
+  private runningSumSq: Float64Array;
+  private runningFrames: number = 0;
+
   constructor(config: FastConformerConfig, backend: ComputeBackend) {
     this.backend = backend;
     this.sampleRate = config.sampleRate;
@@ -28,9 +33,74 @@ export class FeaturePipeline {
     this.fft = new FFT(this.fftSize);
     this.hannWindow = this.createHannWindow(this.windowSize);
     this.melFilters = this.createMelFilterBank();
+
+    this.runningSum = new Float64Array(this.numMelBands);
+    this.runningSumSq = new Float64Array(this.numMelBands);
   }
 
   extractFeatures(audio: Float32Array): TensorHandle {
+    const melFeatures = this.computeRawMel(audio);
+    const numFrames = melFeatures.length / this.numMelBands;
+    const rawFeatures = this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
+    const normalized = this.normalizeFeatures(rawFeatures);
+    this.backend.dispose(rawFeatures);
+    return normalized;
+  }
+
+  /**
+   * Extract features for streaming with running normalization.
+   * Accumulates per-band statistics across all chunks so normalization
+   * is consistent with the model's training (utterance-level stats)
+   * rather than per-chunk stats which distort early chunks.
+   */
+  extractStreamingFeatures(audio: Float32Array): TensorHandle {
+    const melFeatures = this.computeRawMel(audio);
+    const numFrames = melFeatures.length / this.numMelBands;
+
+    // Update running statistics
+    for (let f = 0; f < numFrames; f++) {
+      for (let m = 0; m < this.numMelBands; m++) {
+        const val = melFeatures[f * this.numMelBands + m];
+        this.runningSum[m] += val;
+        this.runningSumSq[m] += val * val;
+      }
+    }
+    this.runningFrames += numFrames;
+
+    // Normalize using accumulated statistics
+    const normalized = new Float32Array(melFeatures.length);
+    for (let m = 0; m < this.numMelBands; m++) {
+      const mean = this.runningSum[m] / this.runningFrames;
+      const variance = this.runningSumSq[m] / this.runningFrames - mean * mean;
+      const invStd = 1.0 / Math.sqrt(Math.max(variance, 1e-5));
+      for (let f = 0; f < numFrames; f++) {
+        normalized[f * this.numMelBands + m] =
+          (melFeatures[f * this.numMelBands + m] - mean) * invStd;
+      }
+    }
+
+    return this.backend.tensor(normalized, [1, numFrames, this.numMelBands]);
+  }
+
+  resetStreamingState(): void {
+    this.runningSum.fill(0);
+    this.runningSumSq.fill(0);
+    this.runningFrames = 0;
+  }
+
+  get frameLength(): number {
+    return this.windowSize;
+  }
+
+  get frameShift(): number {
+    return this.hopSize;
+  }
+
+  get numBands(): number {
+    return this.numMelBands;
+  }
+
+  private computeRawMel(audio: Float32Array): Float32Array {
     const dithered = this.applyDither(audio);
     const frames = this.frameSignal(dithered);
     const numFrames = frames.length;
@@ -62,26 +132,7 @@ export class FeaturePipeline {
       }
     }
 
-    const rawFeatures = this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
-    const normalized = this.normalizeFeatures(rawFeatures);
-    this.backend.dispose(rawFeatures);
-    return normalized;
-  }
-
-  extractStreamingFeatures(audio: Float32Array): TensorHandle {
-    return this.extractFeatures(audio);
-  }
-
-  get frameLength(): number {
-    return this.windowSize;
-  }
-
-  get frameShift(): number {
-    return this.hopSize;
-  }
-
-  get numBands(): number {
-    return this.numMelBands;
+    return melFeatures;
   }
 
   private applyDither(signal: Float32Array): Float32Array {

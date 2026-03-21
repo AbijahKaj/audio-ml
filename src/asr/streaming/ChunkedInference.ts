@@ -126,6 +126,7 @@ export class ChunkedInference {
     this.disposeState();
     this.state = this.createInitialState();
     this.processingLock = Promise.resolve();
+    this.featurePipeline.resetStreamingState();
   }
 
   get currentText(): string {
@@ -209,7 +210,7 @@ export class ChunkedInference {
       audio = this.resampler.resample(audio);
     }
 
-    const mel = this.featurePipeline.extractFeatures(audio);
+    const mel = this.featurePipeline.extractStreamingFeatures(audio);
     const oldEncoderState = this.state.encoderState;
     const { output, newState } = this.encoder.forwardStreaming(mel, oldEncoderState);
     this.backend.dispose(mel);
