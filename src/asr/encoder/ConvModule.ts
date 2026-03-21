@@ -76,19 +76,25 @@ export class ConvModule {
     const B = this.backend.getShape(h)[0] as number;
     const chunkLen = this.backend.getShape(x)[1] as number;
     const C = this.backend.getShape(h)[2] as number;
-    const stateLen = this.kernelSize - 1;
 
-    const state = convState ?? this.backend.zeros([B, stateLen, C]);
+    // Use symmetric padding to match offline conv behavior. The offline
+    // model uses pad_left = pad_right = kernel_size // 2. For streaming,
+    // left context comes from the cached state (previous chunk's last
+    // frames) and right context is zero-padded (no future audio yet).
+    const padSize = Math.floor(this.kernelSize / 2);
+    const state = convState ?? this.backend.zeros([B, padSize, C]);
     h = this.backend.concat([state, h], 1);
 
-    const totalLen = this.backend.getShape(h)[1] as number;
-
+    // Save last padSize frames as state for the next chunk's left context
+    const prepadLen = this.backend.getShape(h)[1] as number;
     const newConvState = this.backend.slice(
       h,
-      [0, totalLen - stateLen, 0],
-      [B, stateLen, C],
+      [0, prepadLen - padSize, 0],
+      [B, padSize, C],
     );
 
+    // Right zero-pad to match symmetric padding, then conv with no padding
+    h = this.backend.pad(h, [[0, 0], [0, padSize], [0, 0]]);
     h = this.depthwiseConvNoPad(h);
 
     const convOutLen = this.backend.getShape(h)[1] as number;
