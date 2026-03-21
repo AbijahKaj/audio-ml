@@ -17,6 +17,7 @@ export class ConvModule {
   private pw2Weight: TensorHandle;
   private pw2Bias: TensorHandle | null;
   private kernelSize: number;
+  private causalConv: boolean;
 
   constructor(backend: ComputeBackend, weights: ConvModuleWeights, kernelSize: number) {
     this.backend = backend;
@@ -33,6 +34,9 @@ export class ConvModule {
     this.pw2Weight = weights.pointwise2Weight;
     this.pw2Bias = weights.pointwise2Bias;
     this.kernelSize = kernelSize;
+    // Newer NeMo streaming models (no running stats) use CausalConv1D + LayerNorm.
+    // Older offline models (with running stats) use standard conv + BatchNorm.
+    this.causalConv = !weights.batchNorm.runningMean;
   }
 
   forward(x: TensorHandle): TensorHandle {
@@ -46,9 +50,14 @@ export class ConvModule {
       const parts = this.backend.split(h, 2, -1);
       h = this.backend.mul(parts[0], this.backend.sigmoid(parts[1]));
 
-      // Depthwise conv1d with symmetric padding
-      const padding = Math.floor(this.kernelSize / 2);
-      h = this.depthwiseConv(h, padding);
+      // Depthwise conv1d: causal (left-only) for streaming models,
+      // symmetric for offline models
+      if (this.causalConv) {
+        h = this.depthwiseConv(h, this.kernelSize - 1, 0);
+      } else {
+        const pad = Math.floor(this.kernelSize / 2);
+        h = this.depthwiseConv(h, pad, pad);
+      }
 
       h = this.applyBatchNorm(h);
 
@@ -76,24 +85,20 @@ export class ConvModule {
     const chunkLen = this.backend.getShape(x)[1] as number;
     const C = this.backend.getShape(h)[2] as number;
 
-    // Use symmetric padding to match offline conv behavior. The offline
-    // model uses pad_left = pad_right = kernel_size // 2. For streaming,
-    // left context comes from the cached state (previous chunk's last
-    // frames) and right context is zero-padded (no future audio yet).
-    const padSize = Math.floor(this.kernelSize / 2);
-    const state = convState ?? this.backend.zeros([B, padSize, C]);
+    // Causal models: left padding = kernelSize-1, no right padding
+    // Symmetric models: left padding = kernelSize//2, right zero-pad
+    const stateLen = this.causalConv ? this.kernelSize - 1 : Math.floor(this.kernelSize / 2);
+    const state = convState ?? this.backend.zeros([B, stateLen, C]);
     h = this.backend.concat([state, h], 1);
 
-    // Save last padSize frames as state for the next chunk's left context
     const prepadLen = this.backend.getShape(h)[1] as number;
     const newConvState = this.backend.slice(
-      h,
-      [0, prepadLen - padSize, 0],
-      [B, padSize, C],
+      h, [0, prepadLen - stateLen, 0], [B, stateLen, C],
     );
 
-    // Right zero-pad to match symmetric padding, then conv with no padding
-    h = this.backend.pad(h, [[0, 0], [0, padSize], [0, 0]]);
+    if (!this.causalConv) {
+      h = this.backend.pad(h, [[0, 0], [0, Math.floor(this.kernelSize / 2)], [0, 0]]);
+    }
     h = this.depthwiseConvNoPad(h);
 
     const convOutLen = this.backend.getShape(h)[1] as number;
@@ -118,14 +123,10 @@ export class ConvModule {
     if (this.bnMean && this.bnVar) {
       return this.backend.batchNorm(h, this.bnMean, this.bnVar, this.bnWeight, this.bnBias, 1e-5);
     }
-    // Instance normalization: compute per-channel stats from current input
-    // h: [B, T, C] → mean/var over T dimension (axis 1)
-    const bnMean = this.backend.mean(h, [1], true);   // [B, 1, C]
-    const centered = this.backend.sub(h, bnMean);
-    const bnVar = this.backend.mean(
-      this.backend.mul(centered, centered), [1], true
-    ); // [B, 1, C]
-    return this.backend.batchNorm(h, bnMean, bnVar, this.bnWeight, this.bnBias, 1e-5);
+    // Some NeMo models (e.g. parakeet_realtime_eou) use LayerNorm instead
+    // of BatchNorm in the conv module (no running stats in checkpoint).
+    // LayerNorm normalizes across C (last dim) for each (B, T) position.
+    return this.backend.layerNorm(h, this.bnWeight, this.bnBias, 1e-5);
   }
 
   /**
@@ -156,21 +157,25 @@ export class ConvModule {
     return this.backend.conv1d(x, wTf, 1, padding, bias ?? undefined);
   }
 
-  private depthwiseConv(x: TensorHandle, padding: number): TensorHandle {
-    // NeMo: [channels, 1, kernel_size] -> need [kernel_size, channels, 1]
+  private depthwiseConv(x: TensorHandle, padLeft: number, padRight?: number): TensorHandle {
     const wShape = this.backend.getShape(this.depthwiseWeight);
     let w: TensorHandle;
-
     if (wShape.length === 3) {
       w = this.backend.transpose(this.depthwiseWeight, [2, 0, 1]);
     } else {
       w = this.depthwiseWeight;
     }
 
-    let h = this.backend.depthwiseConv1d(x, w, 1, padding);
-    if (this.depthwiseBias) {
-      h = this.backend.add(h, this.depthwiseBias);
+    const right = padRight ?? padLeft;
+    if (padLeft === right) {
+      let h = this.backend.depthwiseConv1d(x, w, 1, padLeft);
+      if (this.depthwiseBias) h = this.backend.add(h, this.depthwiseBias);
+      return h;
     }
+    // Asymmetric padding: pad manually then conv with padding=0
+    let padded = this.backend.pad(x, [[0, 0], [padLeft, right], [0, 0]]);
+    let h = this.backend.depthwiseConv1d(padded, w, 1, 0);
+    if (this.depthwiseBias) h = this.backend.add(h, this.depthwiseBias);
     return h;
   }
 
