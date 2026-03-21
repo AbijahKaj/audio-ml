@@ -52,6 +52,7 @@ export class ChunkedInference {
 
   private chunkSizeSamples: number;
   private state: StreamingState;
+  private processingLock: Promise<void> = Promise.resolve();
 
   constructor(
     backend: ComputeBackend,
@@ -91,10 +92,22 @@ export class ChunkedInference {
       return null;
     }
 
-    return this.processChunk();
+    // Serialize chunk processing to prevent concurrent access to shared
+    // encoder/decoder state. Without this, overlapping async processChunk
+    // calls can dispose tensors that another call still references.
+    let result: StreamingResult | null = null;
+    const prev = this.processingLock;
+    this.processingLock = prev
+      .then(() => this.processChunk())
+      .then(r => { result = r; });
+    await this.processingLock;
+    return result;
   }
 
   async flush(): Promise<StreamingResult> {
+    // Wait for any in-flight processChunk to complete before flushing
+    await this.processingLock;
+
     if (this.state.audioBuffer.length > 0) {
       const result = await this.processRemaining();
       if (result) return { ...result, isFinal: true };
@@ -112,6 +125,7 @@ export class ChunkedInference {
   reset(): void {
     this.disposeState();
     this.state = this.createInitialState();
+    this.processingLock = Promise.resolve();
   }
 
   get currentText(): string {
@@ -185,11 +199,24 @@ export class ChunkedInference {
     }
 
     const mel = this.featurePipeline.extractFeatures(audio);
-    const { output, newState } = this.encoder.forwardStreaming(mel, this.state.encoderState);
+    const oldEncoderState = this.state.encoderState;
+    const { output, newState } = this.encoder.forwardStreaming(mel, oldEncoderState);
     this.backend.dispose(mel);
 
     this.state.encoderState = newState;
+    this.disposeEncoderState(oldEncoderState);
     return output;
+  }
+
+  private disposeEncoderState(state: StreamingEncoderState | null): void {
+    if (!state) return;
+    for (const { k, v } of state.cachedKV) {
+      this.backend.dispose(k);
+      this.backend.dispose(v);
+    }
+    for (const s of state.convStates) {
+      this.backend.dispose(s);
+    }
   }
 
   /**
@@ -248,7 +275,7 @@ export class ChunkedInference {
       audioBuffer: new Float32Array(0),
       encoderState: null,
       decoderState: null,
-      lastToken: 0,
+      lastToken: this.config.vocabSize - 1, // blank token (NeMo convention)
       tdtFrameOffset: 0,
       allTokens: [],
     };
