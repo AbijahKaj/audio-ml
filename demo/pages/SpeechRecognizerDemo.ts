@@ -176,13 +176,21 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
 
   const backendSelect = document.createElement('select');
   backendSelect.className = 'asr-select';
-  for (const [value, label] of [['wasm', 'WASM (CPU)'], ['webgpu', 'WebGPU'], ['webgl', 'WebGL']] as const) {
+  // GPU only: pure JS / WASM CPU backends make this model unusable in the browser (long freezes).
+  for (const [value, label] of [['webgpu', 'WebGPU'], ['webgl', 'WebGL']] as const) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = label;
     if (value === 'webgpu' && !('gpu' in navigator)) opt.disabled = true;
     backendSelect.appendChild(opt);
   }
+  backendSelect.value = 'gpu' in navigator ? 'webgpu' : 'webgl';
+
+  const backendHint = el('div', 'asr-backend-hint');
+  backendHint.style.cssText =
+    'font-size:0.8rem;opacity:0.75;margin:0.35rem 0 0;line-height:1.35;max-width:36rem';
+  backendHint.textContent =
+    'CPU and WASM backends are not offered here — they block the page for too long on this model. Use WebGPU where available, otherwise WebGL.';
 
   const loadBtn = document.createElement('button');
   loadBtn.className = 'asr-load-btn';
@@ -195,7 +203,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
   const statusLabel = el('div', 'asr-status');
   statusLabel.textContent = 'Model not loaded';
 
-  loadSection.append(modelSelect, backendSelect, loadBtn, progressBar, statusLabel);
+  loadSection.append(modelSelect, backendSelect, backendHint, loadBtn, progressBar, statusLabel);
   wrapper.appendChild(loadSection);
 
   // audio input section (hidden until model loaded)
@@ -269,7 +277,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
 
     try {
       const spec = MODELS[modelSelect.value];
-      const backend = backendSelect.value as 'wasm' | 'webgpu' | 'webgl';
+      const backend = backendSelect.value as 'webgpu' | 'webgl';
 
       setStatus('Downloading config & vocab...');
       setProgress(0);
@@ -293,7 +301,6 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
         configPath: spec.configUrl,
         vocabPath: spec.vocabUrl,
         backend,
-        backendOptions: { wasmPathPrefix: '/tfjs-wasm/' },
         inputSampleRate: INPUT_SAMPLE_RATE,
         streaming: true,
         chunkSizeMs: 2000,
@@ -319,6 +326,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     loadBtn.style.display = 'none';
     modelSelect.style.display = 'none';
     backendSelect.style.display = 'none';
+    backendHint.style.display = 'none';
 
     audioInput = new AudioInput(INPUT_SAMPLE_RATE);
     new AudioInputUI(audioSection, audioInput);

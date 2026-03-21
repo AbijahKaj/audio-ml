@@ -127,7 +127,7 @@ const asr = new FastConformerASR({
   modelPath: '/models/weights.safetensors',
   configPath: '/models/model_config.json',
   vocabPath: '/models/vocab.json',
-  backend: 'wasm', // browser: also 'cpu', 'webgl', 'webgpu'
+  backend: 'webgpu', // browser: prefer WebGPU; use 'webgl' if unavailable (avoid 'cpu' / 'wasm' for large models)
   streaming: true,
 });
 
