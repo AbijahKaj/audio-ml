@@ -5,16 +5,13 @@ import type { FastConformerConfig } from '../model/ModelConfig';
 
 /**
  * FastConformer dw_striding subsampling.
- * NeMo architecture:
- *   [0] Conv2d(1, 256, 3x3, stride=2, padding=1) + ReLU
- *   [1] Conv2d(256, 256, 3x3, stride=2, padding=1, groups=256) depthwise
- *   [2] Conv2d(256, 256, 1x1) pointwise + ReLU
- *   [3] Conv2d(256, 256, 3x3, stride=2, padding=1, groups=256) depthwise
- *   [4] Conv2d(256, 256, 1x1) pointwise + ReLU
- *   Linear(C*F', d_model)
  *
- * All ops go through ComputeBackend — no direct tf.* imports.
- * Weights arrive as PyTorch layout and are transposed to NHWC here.
+ * NeMo processes mel features in [B, 1, F, T] layout (frequency × time) and
+ * pads both axes to odd before every stride-2 conv for streaming compatibility.
+ * After conv stages: [B, C, F', T'] → permute to [B, T', C, F'] → flatten →
+ * [B, T', C*F'] → Linear → [B, T', d_model].
+ *
+ * Weight format: PyTorch [C_out, C_in, kH, kW] where H=freq, W=time.
  */
 export class ConvSubsampling {
   private b: ComputeBackend;
@@ -22,16 +19,23 @@ export class ConvSubsampling {
   private convBiases: TensorHandle[];
   private outWeight: TensorHandle;
   private outBias: TensorHandle;
-  private expectedFlatDim: number;
+  private needsOddPad: boolean;
 
-  constructor(backend: ComputeBackend, weights: SubsamplingWeights, _config: FastConformerConfig) {
+  constructor(backend: ComputeBackend, weights: SubsamplingWeights, config: FastConformerConfig) {
     this.b = backend;
     this.convWeights = weights.allConvWeights;
     this.convBiases = weights.allConvBiases;
     this.outWeight = weights.outWeight;
     this.outBias = weights.outBias;
-    // Infer expected flattened dim (C*F') from the output weight shape [d_model, C*F']
-    this.expectedFlatDim = backend.getShape(weights.outWeight)[1] as number;
+    // Detect if NeMo's _pad_odd is needed: compare standard conv output dim
+    // with the output weight's expected input dim. Models trained with the
+    // streaming-compatible ConvSubsampling use _pad_odd (e.g. 128 mel RNNT),
+    // while older models don't (e.g. 80 mel TDT).
+    const expectedDim = backend.getShape(weights.outWeight)[1] as number;
+    const C = backend.getShape(weights.allConvWeights[0])[0] as number;
+    let f = config.numMelBands;
+    for (let i = 0; i < 3; i++) f = Math.floor((f + 2 - 3) / 2) + 1;
+    this.needsOddPad = C * f !== expectedDim;
   }
 
   forward(melFeatures: TensorHandle): TensorHandle {
@@ -39,79 +43,102 @@ export class ConvSubsampling {
       const shape = this.b.getShape(melFeatures);
       const B = shape[0] as number;
 
-      // [B, T, F] → [B, 1, T, F]  (channel dim for conv2d)
-      let xNchw = this.b.expandDims(melFeatures, 1);
-
-      // Layer 0: regular Conv2d(1→256, 3x3, stride=2, pad=1) + ReLU
-      xNchw = this.conv2dWithPad(xNchw, this.convWeights[0], this.convBiases[0], 2, 1, false);
-      xNchw = this.b.relu(xNchw);
-
-      // Layer 1: depthwise Conv2d(256, 3x3, stride=2, pad=1, groups=256)
-      xNchw = this.depthwiseConv2dWithPad(xNchw, this.convWeights[1], this.convBiases[1], 2, 1);
-
-      // Layer 2: pointwise Conv2d(256→256, 1x1) + ReLU
-      xNchw = this.conv2dWithPad(xNchw, this.convWeights[2], this.convBiases[2], 1, 0, false);
-      xNchw = this.b.relu(xNchw);
-
-      // Layer 3: depthwise Conv2d(256, 3x3, stride=2, pad=1, groups=256)
-      xNchw = this.depthwiseConv2dWithPad(xNchw, this.convWeights[3], this.convBiases[3], 2, 1);
-
-      // Layer 4: pointwise Conv2d(256→256, 1x1) + ReLU
-      xNchw = this.conv2dWithPad(xNchw, this.convWeights[4], this.convBiases[4], 1, 0, false);
-      xNchw = this.b.relu(xNchw);
-
-      // xNchw: [B, C, T', F']
-      const xShape = this.b.getShape(xNchw);
-      const C = xShape[1] as number;
-      const Tp = xShape[2] as number;
-      const Fp = xShape[3] as number;
-
-      // NeMo: x.transpose(1,2).reshape(b,t,-1) → [B, T', C*F']
-      const xPerm = this.b.transpose(xNchw, [0, 2, 1, 3]);
-      let xFlat = this.b.reshape(xPerm, [B, Tp, C * Fp]);
-
-      // Some NeMo checkpoints expect a slightly different flattened dim
-      // (e.g. 128 mel → 256*17=4352 vs computed 256*16=4096) due to
-      // mel preprocessing differences. Pad with zeros to match.
-      const actualDim = C * Fp;
-      if (actualDim < this.expectedFlatDim) {
-        xFlat = this.b.pad(xFlat, [[0, 0], [0, 0], [0, this.expectedFlatDim - actualDim]]);
-      } else if (actualDim > this.expectedFlatDim) {
-        xFlat = this.b.slice(xFlat, [0, 0, 0], [B, Tp, this.expectedFlatDim]);
+      let x: TensorHandle;
+      if (this.needsOddPad) {
+        // Newer NeMo models (e.g. RNNT streaming): [B, 1, F, T] layout
+        // with odd-padding before stride-2 convs for streaming compatibility.
+        const melFT = this.b.transpose(melFeatures, [0, 2, 1]);
+        x = this.b.expandDims(melFT, 1);
+      } else {
+        // Older NeMo models (e.g. TDT offline): [B, 1, T, F] layout
+        x = this.b.expandDims(melFeatures, 1);
       }
 
-      // Linear projection to d_model
+      // Layer 0: regular Conv2d(1→C, 3x3, stride=2, pad=1) + ReLU
+      x = this.padOddAndConv2d(x, this.convWeights[0], this.convBiases[0], 2, false);
+      x = this.b.relu(x);
+
+      // Layer 1: depthwise Conv2d(C, 3x3, stride=2, pad=1)
+      x = this.padOddAndConv2d(x, this.convWeights[1], this.convBiases[1], 2, true);
+
+      // Layer 2: pointwise Conv2d(C→C, 1x1) + ReLU
+      x = this.conv2dNoPad(x, this.convWeights[2], this.convBiases[2], false);
+      x = this.b.relu(x);
+
+      // Layer 3: depthwise Conv2d(C, 3x3, stride=2, pad=1)
+      x = this.padOddAndConv2d(x, this.convWeights[3], this.convBiases[3], 2, true);
+
+      // Layer 4: pointwise Conv2d(C→C, 1x1) + ReLU
+      x = this.conv2dNoPad(x, this.convWeights[4], this.convBiases[4], false);
+      x = this.b.relu(x);
+
+      const xShape = this.b.getShape(x);
+      const C = xShape[1] as number;
+
+      let xFlat: TensorHandle;
+      if (this.needsOddPad) {
+        const Fp = xShape[2] as number;
+        const Tp = xShape[3] as number;
+        const xPerm = this.b.transpose(x, [0, 3, 1, 2]);
+        xFlat = this.b.reshape(xPerm, [B, Tp, C * Fp]);
+      } else {
+        const Tp = xShape[2] as number;
+        const Fp = xShape[3] as number;
+        const xPerm = this.b.transpose(x, [0, 2, 1, 3]);
+        xFlat = this.b.reshape(xPerm, [B, Tp, C * Fp]);
+      }
+
+      // Linear projection → [B, T', d_model]
       const wT = this.b.transpose(this.outWeight, [1, 0]);
       const projected = this.b.matmul(xFlat, wT);
       return this.b.add(projected, this.outBias);
     });
   }
 
-  /** Regular conv2d: PyTorch [C_out, C_in, kH, kW] → NHWC [kH, kW, C_in, C_out] */
-  private conv2dWithPad(
-    xNchw: TensorHandle, weight: TensorHandle, bias: TensorHandle,
-    stride: number, pad: number, _depthwise: boolean
+  /**
+   * NeMo's _pad_odd: pad frequency and time axes to odd before stride-2 convs,
+   * then apply conv2d with padding=1.
+   */
+  private padOddAndConv2d(
+    x: TensorHandle, weight: TensorHandle, bias: TensorHandle,
+    stride: number, depthwise: boolean
   ): TensorHandle {
-    const wNhwc = this.b.transpose(weight, [2, 3, 1, 0]);
-    let xNhwc = this.b.transpose(xNchw, [0, 2, 3, 1]);
-    if (pad > 0) {
-      xNhwc = this.b.pad(xNhwc, [[0, 0], [pad, pad], [pad, pad], [0, 0]]);
+    const xShape = this.b.getShape(x);
+    const F = xShape[2] as number;
+    const T = xShape[3] as number;
+    // NeMo's _pad_odd: pad to odd before stride-2 convs (streaming models only)
+    const padF = this.needsOddPad && F % 2 === 0 ? 1 : 0;
+    const padT = this.needsOddPad && T % 2 === 0 ? 1 : 0;
+
+    // NCHW → NHWC for TF.js, then add conv padding (1) + odd padding
+    let xNhwc = this.b.transpose(x, [0, 2, 3, 1]);
+    xNhwc = this.b.pad(xNhwc, [[0, 0], [1, 1 + padF], [1, 1 + padT], [0, 0]]);
+
+    let result;
+    if (depthwise) {
+      const wDw = this.b.transpose(weight, [2, 3, 0, 1]); // [C,1,kH,kW] → [kH,kW,C,1]
+      result = this.b.depthwiseConv2d(xNhwc, wDw, [stride, stride], 'valid', bias);
+    } else {
+      const wNhwc = this.b.transpose(weight, [2, 3, 1, 0]); // [Cout,Cin,kH,kW] → [kH,kW,Cin,Cout]
+      result = this.b.conv2d(xNhwc, wNhwc, [stride, stride], 'valid', bias);
     }
-    const result = this.b.conv2d(xNhwc, wNhwc, [stride, stride], 'valid', bias);
-    return this.b.transpose(result, [0, 3, 1, 2]);
+
+    return this.b.transpose(result, [0, 3, 1, 2]); // NHWC → NCHW
   }
 
-  /** Depthwise conv2d: PyTorch [C, 1, kH, kW] → NHWC [kH, kW, C, 1] */
-  private depthwiseConv2dWithPad(
-    xNchw: TensorHandle, weight: TensorHandle, bias: TensorHandle,
-    stride: number, pad: number
+  /** Pointwise (1x1) conv — no padding needed. */
+  private conv2dNoPad(
+    x: TensorHandle, weight: TensorHandle, bias: TensorHandle, depthwise: boolean
   ): TensorHandle {
-    const wDw = this.b.transpose(weight, [2, 3, 0, 1]);
-    let xNhwc = this.b.transpose(xNchw, [0, 2, 3, 1]);
-    if (pad > 0) {
-      xNhwc = this.b.pad(xNhwc, [[0, 0], [pad, pad], [pad, pad], [0, 0]]);
+    let xNhwc = this.b.transpose(x, [0, 2, 3, 1]);
+    let result;
+    if (depthwise) {
+      const wDw = this.b.transpose(weight, [2, 3, 0, 1]);
+      result = this.b.depthwiseConv2d(xNhwc, wDw, [1, 1], 'valid', bias);
+    } else {
+      const wNhwc = this.b.transpose(weight, [2, 3, 1, 0]);
+      result = this.b.conv2d(xNhwc, wNhwc, [1, 1], 'valid', bias);
     }
-    const result = this.b.depthwiseConv2d(xNhwc, wDw, [stride, stride], 'valid', bias);
     return this.b.transpose(result, [0, 3, 1, 2]);
   }
 }

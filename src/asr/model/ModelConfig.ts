@@ -19,6 +19,7 @@ export interface FastConformerConfig {
   decoderType: DecoderType;
   tdtDurations?: number[];
   subsamplingConvChannels: number;
+  normalize: 'per_feature' | 'NA';
 }
 
 export function parseModelConfig(json: string): FastConformerConfig {
@@ -42,5 +43,6 @@ export function parseModelConfig(json: string): FastConformerConfig {
     decoderType: raw.decoder_type ?? 'rnnt',
     tdtDurations: raw.tdt_num_durations,
     subsamplingConvChannels: raw.subsampling_conv_channels ?? 256,
+    normalize: raw.normalize ?? 'per_feature',
   };
 }

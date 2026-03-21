@@ -12,8 +12,8 @@ export class ConvModule {
   private depthwiseBias: TensorHandle | null;
   private bnWeight: TensorHandle;
   private bnBias: TensorHandle;
-  private bnMean: TensorHandle;
-  private bnVar: TensorHandle;
+  private bnMean: TensorHandle | null;
+  private bnVar: TensorHandle | null;
   private pw2Weight: TensorHandle;
   private pw2Bias: TensorHandle | null;
   private kernelSize: number;
@@ -50,8 +50,7 @@ export class ConvModule {
       const padding = Math.floor(this.kernelSize / 2);
       h = this.depthwiseConv(h, padding);
 
-      // BatchNorm (inference mode using running stats)
-      h = this.backend.batchNorm(h, this.bnMean, this.bnVar, this.bnWeight, this.bnBias, 1e-5);
+      h = this.applyBatchNorm(h);
 
       // SiLU
       h = this.backend.silu(h);
@@ -102,11 +101,31 @@ export class ConvModule {
       h = this.backend.slice(h, [0, convOutLen - chunkLen, 0], [B, chunkLen, C]);
     }
 
-    h = this.backend.batchNorm(h, this.bnMean, this.bnVar, this.bnWeight, this.bnBias, 1e-5);
+    h = this.applyBatchNorm(h);
     h = this.backend.silu(h);
     h = this.conv1d(h, this.pw2Weight, this.pw2Bias);
 
     return { output: h, newConvState };
+  }
+
+  /**
+   * Apply batch normalization. When running stats are available, use them
+   * (standard inference mode). When absent (checkpoint didn't export
+   * buffers), compute mean/variance from the input per-channel (instance
+   * normalization), matching PyTorch's BatchNorm with track_running_stats=False.
+   */
+  private applyBatchNorm(h: TensorHandle): TensorHandle {
+    if (this.bnMean && this.bnVar) {
+      return this.backend.batchNorm(h, this.bnMean, this.bnVar, this.bnWeight, this.bnBias, 1e-5);
+    }
+    // Instance normalization: compute per-channel stats from current input
+    // h: [B, T, C] → mean/var over T dimension (axis 1)
+    const bnMean = this.backend.mean(h, [1], true);   // [B, 1, C]
+    const centered = this.backend.sub(h, bnMean);
+    const bnVar = this.backend.mean(
+      this.backend.mul(centered, centered), [1], true
+    ); // [B, 1, C]
+    return this.backend.batchNorm(h, bnMean, bnVar, this.bnWeight, this.bnBias, 1e-5);
   }
 
   /**

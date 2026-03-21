@@ -14,6 +14,7 @@ export class FeaturePipeline {
   private melFilters: Float32Array[];
   private hannWindow: Float32Array;
   private dither: number = 1e-5;
+  private normalizeMode: 'per_feature' | 'NA';
 
   // Running normalization state for streaming
   private runningSum: Float64Array;
@@ -33,6 +34,7 @@ export class FeaturePipeline {
     this.fft = new FFT(this.fftSize);
     this.hannWindow = this.createHannWindow(this.windowSize);
     this.melFilters = this.createMelFilterBank();
+    this.normalizeMode = config.normalize ?? 'per_feature';
 
     this.runningSum = new Float64Array(this.numMelBands);
     this.runningSumSq = new Float64Array(this.numMelBands);
@@ -41,6 +43,9 @@ export class FeaturePipeline {
   extractFeatures(audio: Float32Array): TensorHandle {
     const melFeatures = this.computeRawMel(audio);
     const numFrames = melFeatures.length / this.numMelBands;
+    if (this.normalizeMode === 'NA') {
+      return this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
+    }
     const rawFeatures = this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
     const normalized = this.normalizeFeatures(rawFeatures);
     this.backend.dispose(rawFeatures);
@@ -56,6 +61,10 @@ export class FeaturePipeline {
   extractStreamingFeatures(audio: Float32Array): TensorHandle {
     const melFeatures = this.computeRawMel(audio);
     const numFrames = melFeatures.length / this.numMelBands;
+
+    if (this.normalizeMode === 'NA') {
+      return this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
+    }
 
     // Update running statistics
     for (let f = 0; f < numFrames; f++) {

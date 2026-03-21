@@ -97,6 +97,10 @@ def extract_config(model) -> dict:
         if durations:
             result["tdt_num_durations"] = durations
 
+    # Feature normalization mode (streaming models typically use normalize: "NA")
+    normalize = getattr(cfg.preprocessor, "normalize", "per_feature")
+    result["normalize"] = str(normalize) if normalize else "per_feature"
+
     return result
 
 

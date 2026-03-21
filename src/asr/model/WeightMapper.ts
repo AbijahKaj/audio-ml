@@ -37,8 +37,8 @@ export interface ConvModuleWeights {
   batchNorm: {
     weight: TensorHandle;
     bias: TensorHandle;
-    runningMean: TensorHandle;
-    runningVar: TensorHandle;
+    runningMean: TensorHandle | null;
+    runningVar: TensorHandle | null;
   };
   pointwise2Weight: TensorHandle;
   pointwise2Bias: TensorHandle | null;
@@ -93,7 +93,6 @@ export interface ModelWeights {
 export function mapWeights(
   weights: Map<string, TensorHandle>,
   config: FastConformerConfig,
-  backend?: import('../compute/Backend').ComputeBackend,
 ): ModelWeights {
   const consumed = new Set<string>();
 
@@ -187,21 +186,10 @@ export function mapWeights(
 
     const bnWeight = get(`${prefix}.conv.batch_norm.weight`);
     const bnBias = get(`${prefix}.conv.batch_norm.bias`);
-    // Running stats may be absent (some checkpoints export only learned params).
-    // Default to identity: mean=0, var=1 → batchnorm becomes scale+shift.
-    let bnRunningMean = tryGet(`${prefix}.conv.batch_norm.running_mean`);
-    let bnRunningVar = tryGet(`${prefix}.conv.batch_norm.running_var`);
-    if ((!bnRunningMean || !bnRunningVar) && backend) {
-      const bnDim = backend.getShape(bnWeight)[0] as number;
-      bnRunningMean = bnRunningMean ?? backend.zeros([bnDim]);
-      bnRunningVar = bnRunningVar ?? backend.ones([bnDim]);
-    }
-    if (!bnRunningMean || !bnRunningVar) {
-      throw new Error(
-        `Missing batch_norm running stats for ${prefix} and no backend provided to create defaults. ` +
-        `Pass backend to mapWeights().`
-      );
-    }
+    // Running stats may be absent (some checkpoints export only learned
+    // params, not buffers). When null, ConvModule uses instance normalization.
+    const bnRunningMean = tryGet(`${prefix}.conv.batch_norm.running_mean`);
+    const bnRunningVar = tryGet(`${prefix}.conv.batch_norm.running_var`);
 
     const conv: ConvModuleWeights = {
       norm: getLayerNorm(`${prefix}.norm_conv`),
