@@ -1,0 +1,52 @@
+{
+  "name": "@audio-ml/asr",
+  "version": "1.0.2",
+  "description": "FastConformer ASR (TensorFlow.js) for use with audio-ml",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "yarn build"
+  },
+  "keywords": [
+    "asr",
+    "speech-recognition",
+    "fastconformer",
+    "tensorflow.js",
+    "audio-ml"
+  ],
+  "author": "Abijah Kajabika",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbijahKaj/audio-ml.git",
+    "directory": "packages/asr"
+  },
+  "peerDependencies": {
+    "audio-ml": "^1.0.2"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
+    "fft.js": "^4.0.4"
+  },
+  "devDependencies": {
+    "audio-ml": "file:../..",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

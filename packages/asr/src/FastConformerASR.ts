@@ -1,18 +1,18 @@
-import { BaseApplication, type ApplicationConfig } from '../base/BaseApplication';
-import { TfjsBackend, type TfjsBackendName, type TfjsInitOptions } from '../../asr/compute/TfjsBackend';
-import type { ComputeBackend } from '../../asr/compute/Backend';
-import { FeaturePipeline } from '../../asr/features/FeaturePipeline';
-import { Resampler } from '../../asr/features/Resampler';
-import { FastConformerEncoder } from '../../asr/encoder/FastConformerEncoder';
-import { createDecoder, type GreedyDecoder } from '../../asr/decoder/createDecoder';
-import { SentencePieceDecoder } from '../../asr/text/SentencePieceDecoder';
-import { parseModelConfig, type FastConformerConfig } from '../../asr/model/ModelConfig';
-import { loadSafeTensors } from '../../asr/model/SafeTensorsLoader';
-import { mapWeights } from '../../asr/model/WeightMapper';
-import { ChunkedInference, type StreamingResult } from '../../asr/streaming/ChunkedInference';
-import { Endpointer } from '../../asr/streaming/Endpointer';
+import { BaseApplication, type ApplicationConfig } from 'audio-ml/applications';
+import { TfjsBackend, type TfjsBackendName, type TfjsInitOptions } from './compute/TfjsBackend';
+import type { ComputeBackend } from './compute/Backend';
+import { FeaturePipeline } from './features/FeaturePipeline';
+import { Resampler } from './features/Resampler';
+import { FastConformerEncoder } from './encoder/FastConformerEncoder';
+import { createDecoder, type GreedyDecoder } from './decoder/createDecoder';
+import { SentencePieceDecoder } from './text/SentencePieceDecoder';
+import { parseModelConfig, type FastConformerConfig } from './model/ModelConfig';
+import { loadSafeTensors } from './model/SafeTensorsLoader';
+import { mapWeights } from './model/WeightMapper';
+import { ChunkedInference, type StreamingResult } from './streaming/ChunkedInference';
+import { Endpointer } from './streaming/Endpointer';
 
-export interface SpeechRecognizerConfig extends ApplicationConfig {
+export interface FastConformerASRConfig extends ApplicationConfig {
   modelPath: string;
   configPath: string;
   vocabPath: string;
@@ -38,7 +38,7 @@ async function fetchText(url: string): Promise<string> {
   return response.text();
 }
 
-export class SpeechRecognizer extends BaseApplication {
+export class FastConformerASR extends BaseApplication {
   private backend!: ComputeBackend;
   private featurePipeline!: FeaturePipeline;
   private encoder!: FastConformerEncoder;
@@ -63,7 +63,7 @@ export class SpeechRecognizer extends BaseApplication {
   private backendOptions: TfjsInitOptions;
   private inputSampleRate: number;
 
-  constructor(config: SpeechRecognizerConfig) {
+  constructor(config: FastConformerASRConfig) {
     super(config);
     this.modelPath = config.modelPath;
     this.configPath = config.configPath;

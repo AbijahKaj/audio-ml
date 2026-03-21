@@ -1,4 +1,4 @@
-import { VAD, type VADConfig } from '../../applications/speech/VAD';
+import { VAD, type VADConfig } from 'audio-ml/applications';
 
 export type EndpointEvent = 'speech' | 'silence' | 'speech-end';
 

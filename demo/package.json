@@ -5,9 +5,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "predev": "cd .. && npm run build:package",
+    "predev": "cd .. && npm run build:all",
     "dev": "vite",
-    "prebuild": "cd .. && npm run build:package",
+    "prebuild": "cd .. && npm run build:all",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -16,6 +16,7 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
+    "@audio-ml/asr": "link:../packages/asr",
     "audio-ml": "link:..",
     "fft.js": "^4.0.4"
   }

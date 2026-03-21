@@ -1,10 +1,10 @@
 import { readFileSync } from 'fs';
-import '@tensorflow/tfjs-backend-cpu';
-import { TfjsBackend } from './src/asr/compute/TfjsBackend';
-import { loadSafeTensors } from './src/asr/model/SafeTensorsLoader';
-import { parseModelConfig } from './src/asr/model/ModelConfig';
-import { mapWeights } from './src/asr/model/WeightMapper';
-import { ConvSubsampling } from './src/asr/encoder/ConvSubsampling';
+import '@tensorflow/tfjs';
+import { TfjsBackend } from '../packages/asr/src/compute/TfjsBackend';
+import { loadSafeTensors } from '../packages/asr/src/model/SafeTensorsLoader';
+import { parseModelConfig } from '../packages/asr/src/model/ModelConfig';
+import { mapWeights } from '../packages/asr/src/model/WeightMapper';
+import { ConvSubsampling } from '../packages/asr/src/encoder/ConvSubsampling';
 
 async function main() {
   const backend = new TfjsBackend();

@@ -3,16 +3,16 @@
  * compare against NeMo reference, and test streaming.
  */
 import { readFileSync, readdirSync, existsSync } from 'fs';
-import '@tensorflow/tfjs-backend-cpu';
-import { TfjsBackend } from './src/asr/compute/TfjsBackend';
-import { loadSafeTensors } from './src/asr/model/SafeTensorsLoader';
-import { parseModelConfig } from './src/asr/model/ModelConfig';
-import { mapWeights } from './src/asr/model/WeightMapper';
-import { FeaturePipeline } from './src/asr/features/FeaturePipeline';
-import { FastConformerEncoder } from './src/asr/encoder/FastConformerEncoder';
-import { createDecoder } from './src/asr/decoder/createDecoder';
-import { SentencePieceDecoder } from './src/asr/text/SentencePieceDecoder';
-import { ChunkedInference } from './src/asr/streaming/ChunkedInference';
+import '@tensorflow/tfjs';
+import { TfjsBackend } from '../packages/asr/src/compute/TfjsBackend';
+import { loadSafeTensors } from '../packages/asr/src/model/SafeTensorsLoader';
+import { parseModelConfig } from '../packages/asr/src/model/ModelConfig';
+import { mapWeights } from '../packages/asr/src/model/WeightMapper';
+import { FeaturePipeline } from '../packages/asr/src/features/FeaturePipeline';
+import { FastConformerEncoder } from '../packages/asr/src/encoder/FastConformerEncoder';
+import { createDecoder } from '../packages/asr/src/decoder/createDecoder';
+import { SentencePieceDecoder } from '../packages/asr/src/text/SentencePieceDecoder';
+import { ChunkedInference } from '../packages/asr/src/streaming/ChunkedInference';
 
 const MODEL_DIR = '/workspace/test_model';
 const AUDIO_DIR = '/workspace/test_audio';

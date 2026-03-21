@@ -14,10 +14,6 @@
       "import": "./dist/applications/index.js",
       "types": "./dist/applications/index.d.ts"
     },
-    "./asr": {
-      "import": "./dist/asr/index.js",
-      "types": "./dist/asr/index.d.ts"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -27,6 +23,8 @@
   ],
   "scripts": {
     "build:package": "tsc",
+    "build:asr": "yarn --cwd packages/asr install && yarn --cwd packages/asr build",
+    "build:all": "yarn build:package && yarn build:asr",
     "prepublishOnly": "yarn build:package"
   },
   "keywords": [
@@ -50,13 +48,11 @@
     "url": "git+https://github.com/AbijahKaj/audio-ml.git"
   },
   "devDependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3"
   },
   "dependencies": {
-    "@tensorflow/tfjs": "^4.22.0",
-    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
-    "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
     "fft.js": "^4.0.4"
   },
   "engines": {

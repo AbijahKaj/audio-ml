@@ -2,10 +2,10 @@
  * Speech Recognizer (ASR) Demo Page
  *
  * Loads a FastConformer model, streams mic / file audio through the
- * SpeechRecognizer and displays live transcription results.
+ * FastConformerASR and displays live transcription results.
  */
 
-import { SpeechRecognizer, type ASRResult, Endpointer } from 'audio-ml/asr';
+import { FastConformerASR, type ASRResult, Endpointer } from '@audio-ml/asr';
 import { AudioInput } from '../components/AudioInput';
 import { AudioInputUI } from '../components/AudioInputUI';
 
@@ -146,7 +146,7 @@ async function fetchTextCached(url: string): Promise<string> {
 /* ------------------------------------------------------------------ */
 
 export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
-  let recognizer: SpeechRecognizer | null = null;
+  let recognizer: FastConformerASR | null = null;
   let audioInput: AudioInput | null = null;
   let destroyed = false;
 
@@ -287,7 +287,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
       setStatus('Initialising TensorFlow.js...');
       setProgress(0.92);
 
-      recognizer = new SpeechRecognizer({
+      recognizer = new FastConformerASR({
         sampleRate: INPUT_SAMPLE_RATE,
         modelPath: spec.weightsUrl,
         configPath: spec.configUrl,

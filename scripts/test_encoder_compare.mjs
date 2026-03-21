@@ -2,12 +2,12 @@
  * Compare our encoder output to NeMo's using NeMo's exact features.
  */
 import { readFileSync } from 'fs';
-import '@tensorflow/tfjs-backend-cpu';
-import { TfjsBackend } from './src/asr/compute/TfjsBackend';
-import { loadSafeTensors } from './src/asr/model/SafeTensorsLoader';
-import { parseModelConfig } from './src/asr/model/ModelConfig';
-import { mapWeights } from './src/asr/model/WeightMapper';
-import { FastConformerEncoder } from './src/asr/encoder/FastConformerEncoder';
+import '@tensorflow/tfjs';
+import { TfjsBackend } from '../packages/asr/src/compute/TfjsBackend';
+import { loadSafeTensors } from '../packages/asr/src/model/SafeTensorsLoader';
+import { parseModelConfig } from '../packages/asr/src/model/ModelConfig';
+import { mapWeights } from '../packages/asr/src/model/WeightMapper';
+import { FastConformerEncoder } from '../packages/asr/src/encoder/FastConformerEncoder';
 
 const MODEL_DIR = '/workspace/test_model';
 const AUDIO_DIR = '/workspace/test_audio';

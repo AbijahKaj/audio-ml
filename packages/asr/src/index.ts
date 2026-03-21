@@ -1,6 +1,9 @@
 // Main application
-export { SpeechRecognizer, type SpeechRecognizerConfig, type ASRResult }
-  from '../applications/speech/SpeechRecognizer';
+export {
+  FastConformerASR,
+  type FastConformerASRConfig,
+  type ASRResult,
+} from './FastConformerASR';
 
 // Encoder
 export { FastConformerEncoder, type StreamingEncoderState }

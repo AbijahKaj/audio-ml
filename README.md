@@ -4,12 +4,22 @@ A JavaScript/TypeScript library for real-time audio feature extraction and proce
 
 ## Installation
 
+Core library (analyzers and applications such as VAD):
+
 ```bash
 npm install audio-ml
 # or
 yarn add audio-ml
 # or
 pnpm add audio-ml
+```
+
+**FastConformer ASR** (TensorFlow.js inference) lives in a separate package and lists `audio-ml` as a peer dependency:
+
+```bash
+npm install audio-ml @audio-ml/asr
+# or
+yarn add audio-ml @audio-ml/asr
 ```
 
 ## Demo
@@ -105,9 +115,37 @@ detector.on('beep-detected', ({ frequency, duration, confidence }) => {
 detector.processFrame(pcm);
 ```
 
+## Automatic speech recognition (`@audio-ml/asr`)
+
+End-to-end **FastConformer** ASR (feature extraction, encoder, RNNT/TDT greedy decode, optional streaming) runs in the browser or Node via TensorFlow.js. Import **`FastConformerASR`** from **`@audio-ml/asr`**. It extends the same **`BaseApplication`** / event model as the apps above, but depends on **`audio-ml/applications`** internally (for example VAD-backed endpointing).
+
+```typescript
+import { FastConformerASR, type ASRResult } from '@audio-ml/asr';
+
+const asr = new FastConformerASR({
+  sampleRate: 16_000,
+  modelPath: '/models/weights.safetensors',
+  configPath: '/models/model_config.json',
+  vocabPath: '/models/vocab.json',
+  backend: 'wasm', // or 'cpu', 'webgl', 'webgpu'
+  streaming: true,
+});
+
+await asr.load();
+
+asr.on('partial', (p) => console.log('partial', p.text));
+asr.on('final', (r: ASRResult) => console.log('final', r.text));
+
+// Per frame (see package exports for batch helpers such as transcribe())
+asr.processFrame(pcmFrame);
+```
+
+The package also exports lower-level pieces (`FastConformerEncoder`, decoders, `FeaturePipeline`, `TfjsBackend`, etc.) if you want to compose your own pipeline.
+
 ## Use Cases
 
-- **Speech recognition**: MFCC and PLP for acoustic modeling, Spectral features for phone classification
+- **Speech recognition (end-to-end)**: `@audio-ml/asr` with **`FastConformerASR`** for in-browser or Node ASR with exported NeMo-compatible weights
+- **Speech recognition (features only)**: MFCC and PLP for acoustic modeling, spectral features for phone classification
 - **Speaker identification**: Voiceprint extraction via MFCC, LPC, and Spectral Centroid/Bandwidth
 - **Voice activity detection**: VAD application, or build your own with RMSE, ZCR, and Spectral Flatness
 - **Noise reduction**: AudioDenoiser application for real-time spectral subtraction
@@ -124,17 +162,27 @@ detector.processFrame(pcm);
 ## Development
 
 ```bash
+# Build the main library and @audio-ml/asr (required for the ASR demo page)
+yarn build:all
+
 # Run the interactive demo
 cd demo && yarn install && yarn dev
 ```
 
-The demo includes live visualizations of all 16 analyzers plus interactive pages for each application.
+The demo includes live visualizations of all 16 analyzers, interactive pages for each application, and a **Speech recognizer** page powered by **`@audio-ml/asr`**.
+
+Repository layout:
+
+- **`src/`** — `audio-ml` package (analyzers under `src/analysis/`, applications under `src/applications/`)
+- **`packages/asr/`** — `@audio-ml/asr` (FastConformer stack and **`FastConformerASR`**)
 
 ## Contributing
 
 To add a new analyzer, create a class in `src/analysis/` implementing `analyzeFrame(pcm: Float32Array)` and export it from `src/analysis/index.ts`.
 
-To add a new application, extend `BaseApplication` in `src/applications/`, implement `processFrame()`, and export from `src/applications/index.ts`.
+To add a new application (other than ASR), extend `BaseApplication` in `src/applications/`, implement `processFrame()`, and export from `src/applications/index.ts`.
+
+ASR and related inference code belong in **`packages/asr/`**; export new public APIs from **`packages/asr/src/index.ts`**.
 
 ## License
 
