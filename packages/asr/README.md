@@ -1,0 +1,114 @@
+# @audio-ml/asr
+
+FastConformer speech recognition in **TypeScript**, powered by **TensorFlow.js**. Models are exported from [NVIDIA NeMo](https://github.com/NVIDIA/NeMo) to SafeTensors plus JSON config and vocabulary—see the [`audio-ml` repo](https://github.com/AbijahKaj/audio-ml) and `tools/export_nemo_to_safetensors.py`.
+
+This package depends on **[`audio-ml`](https://www.npmjs.com/package/audio-ml)** for shared application types (for example `BaseApplication` and VAD used by streaming endpointing).
+
+## Install
+
+```bash
+npm install audio-ml @audio-ml/asr
+```
+
+Optional, for **native TensorFlow in Node.js** (faster than pure JS CPU):
+
+```bash
+npm install @tensorflow/tfjs-node
+```
+
+`@tensorflow/tfjs-node` is an **optional peer**; install it only when you use the `tensorflow` backend in Node.
+
+## Ready-to-use models (same as the `audio-ml` demo)
+
+These Hugging Face repos ship `model.safetensors`, `model_config.json`, and `vocab.json` on the `main` branch (NeMo → export via `tools/export_nemo_to_safetensors.py` in the main repo).
+
+| Model | Hugging Face repo | Notes |
+|-------|-------------------|--------|
+| Parakeet TDT 110M | [AbijahKaj/parakeet-tdt-110m-web](https://huggingface.co/AbijahKaj/parakeet-tdt-110m-web) | English, TDT decoder, ~220 MB weights |
+| Parakeet RNNT 120M (streaming) | [AbijahKaj/parakeet-rnnt-120m-web](https://huggingface.co/AbijahKaj/parakeet-rnnt-120m-web) | English, RNNT, streaming-oriented |
+| FastConformer TDT Large | [AbijahKaj/fastconformer-tdt-large-web](https://huggingface.co/AbijahKaj/fastconformer-tdt-large-web) | English, TDT, ~218 MB weights |
+
+Resolve URLs follow this pattern (`{repo}` = `username/repo`):
+
+`https://huggingface.co/{repo}/resolve/main/model.safetensors`  
+`https://huggingface.co/{repo}/resolve/main/model_config.json`  
+`https://huggingface.co/{repo}/resolve/main/vocab.json`
+
+## Quick start
+
+Example using **Parakeet TDT 110M** (same default-style URLs as `demo/pages/SpeechRecognizerDemo.ts`):
+
+```typescript
+import { FastConformerASR, type ASRResult } from '@audio-ml/asr';
+
+const HF = 'https://huggingface.co/AbijahKaj/parakeet-tdt-110m-web/resolve/main';
+
+const asr = new FastConformerASR({
+  sampleRate: 16_000,
+  modelPath: `${HF}/model.safetensors`,
+  configPath: `${HF}/model_config.json`,
+  vocabPath: `${HF}/vocab.json`,
+  backend: 'webgpu', // browser: 'webgpu' | 'webgl' | 'wasm' | 'cpu'
+  streaming: true,
+});
+
+await asr.load();
+
+asr.on('partial', (p) => console.log(p.text));
+asr.on('final', (r: ASRResult) => console.log(r.text));
+
+asr.processFrame(pcmFrame);
+```
+
+To load from already-fetched buffers:
+
+```typescript
+await asr.loadFromBuffers(modelArrayBuffer, configJsonString, vocabJsonString);
+```
+
+Offline pass:
+
+```typescript
+const result = await asr.transcribe(audioFloat32);
+```
+
+## TensorFlow.js backends
+
+| Backend       | Typical use |
+|---------------|-------------|
+| `webgpu`      | Browser, best GPU path when supported |
+| `webgl`       | Browser, broader GPU support |
+| `wasm`        | Browser, good CPU throughput via WASM |
+| `cpu`         | Browser or Node, pure JS (slow for large models) |
+| `tensorflow`  | **Node only** — requires `@tensorflow/tfjs-node` |
+
+WASM backend options:
+
+```typescript
+await asr.load(); // after constructing with:
+// backend: 'wasm',
+// backendOptions: { wasmPathPrefix: '/tfjs-wasm/' }
+```
+
+Serve `.wasm` files from `tfjs-backend-wasm` with correct MIME type (see the main repo demo Vite config).
+
+## Swappable compute layer
+
+Inference is expressed against a **`ComputeBackend`** interface. **`TfjsBackend`** is the default implementation; you can supply another backend that implements the same operations if you integrate a different runtime.
+
+## Exports
+
+Besides **`FastConformerASR`**, the package exports encoder/decoder/feature/text/model helpers (for example `FastConformerEncoder`, `createDecoder`, `FeaturePipeline`, `loadSafeTensors`, `parseModelConfig`, streaming types, and `Endpointer`). See `src/index.ts` for the full public API.
+
+## Requirements
+
+- **Node.js** ≥ 18
+- **Peer:** `audio-ml` ^1.0.0
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
+
+## Repository
+
+[github.com/AbijahKaj/audio-ml](https://github.com/AbijahKaj/audio-ml) (package path: `packages/asr`).
