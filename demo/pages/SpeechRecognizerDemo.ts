@@ -5,7 +5,7 @@
  * SpeechRecognizer and displays live transcription results.
  */
 
-import { SpeechRecognizer, type ASRResult } from 'audio-ml/asr';
+import { SpeechRecognizer, type ASRResult, Endpointer } from 'audio-ml/asr';
 import { AudioInput } from '../components/AudioInput';
 import { AudioInputUI } from '../components/AudioInputUI';
 
@@ -323,23 +323,66 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     audioInput = new AudioInput(INPUT_SAMPLE_RATE);
     new AudioInputUI(audioSection, audioInput);
 
-    // Accumulate all raw PCM for offline transcription on stop
-    let recordedChunks: Float32Array[] = [];
+    // VAD endpointer detects pauses and triggers offline transcription
+    // of each utterance segment for accurate results while recording.
+    const endpointer = new Endpointer({
+      sampleRate: INPUT_SAMPLE_RATE,
+      silenceTimeoutMs: 1200,
+    });
+
+    let utteranceChunks: Float32Array[] = [];
+    let allChunks: Float32Array[] = [];
+    let transcribing = false;
+
+    async function transcribeUtterance() {
+      if (!recognizer || utteranceChunks.length === 0 || transcribing) return;
+      transcribing = true;
+
+      const totalLen = utteranceChunks.reduce((s, c) => s + c.length, 0);
+      const audio = new Float32Array(totalLen);
+      let off = 0;
+      for (const c of utteranceChunks) { audio.set(c, off); off += c.length; }
+      utteranceChunks = [];
+
+      const audioDurationS = totalLen / INPUT_SAMPLE_RATE;
+      if (audioDurationS < 0.3) { transcribing = false; return; }
+
+      partialLine.textContent = `Transcribing ${audioDurationS.toFixed(1)}s\u2026`;
+      const result = await recognizer.transcribe(audio);
+      if (result.text.trim()) {
+        appendTranscript(result, audioDurationS);
+      }
+      partialLine.textContent = '';
+      recognizer.reset();
+      transcribing = false;
+    }
 
     audioInput.on('pcm-data', async (pcm: Float32Array) => {
       if (!recognizer) return;
-      recordedChunks.push(new Float32Array(pcm));
+      const copy = new Float32Array(pcm);
+      utteranceChunks.push(copy);
+      allChunks.push(copy);
 
-      // Feed streaming for partial results (best-effort preview)
+      // VAD-based utterance segmentation
+      const event = endpointer.processFrame(pcm);
+      if (event === 'speech') {
+        const dur = utteranceChunks.reduce((s, c) => s + c.length, 0) / INPUT_SAMPLE_RATE;
+        partialLine.textContent = `Recording\u2026 (${dur.toFixed(1)}s)`;
+      } else if (event === 'speech-end') {
+        transcribeUtterance();
+      }
+
+      // Also feed streaming for live preview text
       const result = await recognizer.processFrameAsync(pcm);
-      if (result) {
-        partialLine.textContent = result.text || '(listening\u2026)';
-        latencyLabel.textContent = `Streaming chunk: ${Math.round(result.latencyMs)} ms | ${result.decoderType.toUpperCase()}`;
+      if (result && result.text.trim()) {
+        latencyLabel.textContent = `Preview: ${result.text}`;
       }
     });
 
     audioInput.on('start', () => {
-      recordedChunks = [];
+      utteranceChunks = [];
+      allChunks = [];
+      endpointer.reset();
       partialLine.textContent = '(listening\u2026)';
       latencyLabel.textContent = '';
       recognizer?.start();
@@ -348,44 +391,14 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     audioInput.on('stop', async () => {
       if (!recognizer) return;
 
-      // Combine all recorded audio into one buffer
-      const totalLen = recordedChunks.reduce((s, c) => s + c.length, 0);
-      if (totalLen === 0) {
-        partialLine.textContent = '';
-        recognizer.reset();
-        return;
+      // Transcribe any remaining audio in the current utterance
+      if (utteranceChunks.length > 0) {
+        await transcribeUtterance();
       }
 
-      const fullAudio = new Float32Array(totalLen);
-      let offset = 0;
-      for (const chunk of recordedChunks) {
-        fullAudio.set(chunk, offset);
-        offset += chunk.length;
-      }
-      recordedChunks = [];
-      const audioDurationS = totalLen / INPUT_SAMPLE_RATE;
-
-      partialLine.textContent = `Transcribing ${audioDurationS.toFixed(1)}s of audio\u2026`;
-      latencyLabel.textContent = '';
-
-      // Run full offline transcription for accurate results
-      const result = await recognizer.transcribe(fullAudio);
-
-      if (result.text.trim()) {
-        appendTranscript(result, audioDurationS);
-      }
       partialLine.textContent = '';
       latencyLabel.textContent = '';
       recognizer.reset();
-    });
-
-    recognizer?.on('partial', (data: { text: string }) => {
-      partialLine.textContent = data.text;
-    });
-
-    recognizer?.on('final', (result: ASRResult) => {
-      appendTranscript(result);
-      partialLine.textContent = '';
     });
   }
 

@@ -86,7 +86,7 @@ export class SpeechRecognizer extends BaseApplication {
     this.config = parseModelConfig(configJson);
 
     const weights = await loadSafeTensors(this.modelPath, this.backend);
-    const modelWeights = mapWeights(weights, this.config);
+    const modelWeights = mapWeights(weights, this.config, this.backend);
 
     this.featurePipeline = new FeaturePipeline(this.config, this.backend);
     this.encoder = new FastConformerEncoder(this.backend, modelWeights.encoder, this.config);
@@ -116,7 +116,7 @@ export class SpeechRecognizer extends BaseApplication {
     this.config = parseModelConfig(configJson);
 
     const weights = await loadSafeTensors(modelBuffer, this.backend);
-    const modelWeights = mapWeights(weights, this.config);
+    const modelWeights = mapWeights(weights, this.config, this.backend);
 
     this.featurePipeline = new FeaturePipeline(this.config, this.backend);
     this.encoder = new FastConformerEncoder(this.backend, modelWeights.encoder, this.config);

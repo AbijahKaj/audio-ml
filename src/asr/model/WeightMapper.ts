@@ -92,7 +92,8 @@ export interface ModelWeights {
 
 export function mapWeights(
   weights: Map<string, TensorHandle>,
-  config: FastConformerConfig
+  config: FastConformerConfig,
+  backend?: import('../compute/Backend').ComputeBackend,
 ): ModelWeights {
   const consumed = new Set<string>();
 
@@ -184,6 +185,24 @@ export function mapWeights(
     // num_batches_tracked is a scalar tracking counter, not a model weight
     tryGet(`${prefix}.conv.batch_norm.num_batches_tracked`);
 
+    const bnWeight = get(`${prefix}.conv.batch_norm.weight`);
+    const bnBias = get(`${prefix}.conv.batch_norm.bias`);
+    // Running stats may be absent (some checkpoints export only learned params).
+    // Default to identity: mean=0, var=1 → batchnorm becomes scale+shift.
+    let bnRunningMean = tryGet(`${prefix}.conv.batch_norm.running_mean`);
+    let bnRunningVar = tryGet(`${prefix}.conv.batch_norm.running_var`);
+    if ((!bnRunningMean || !bnRunningVar) && backend) {
+      const bnDim = backend.getShape(bnWeight)[0] as number;
+      bnRunningMean = bnRunningMean ?? backend.zeros([bnDim]);
+      bnRunningVar = bnRunningVar ?? backend.ones([bnDim]);
+    }
+    if (!bnRunningMean || !bnRunningVar) {
+      throw new Error(
+        `Missing batch_norm running stats for ${prefix} and no backend provided to create defaults. ` +
+        `Pass backend to mapWeights().`
+      );
+    }
+
     const conv: ConvModuleWeights = {
       norm: getLayerNorm(`${prefix}.norm_conv`),
       pointwise1Weight: get(`${prefix}.conv.pointwise_conv1.weight`),
@@ -191,10 +210,10 @@ export function mapWeights(
       depthwiseWeight: get(`${prefix}.conv.depthwise_conv.weight`),
       depthwiseBias: tryGet(`${prefix}.conv.depthwise_conv.bias`),
       batchNorm: {
-        weight: get(`${prefix}.conv.batch_norm.weight`),
-        bias: get(`${prefix}.conv.batch_norm.bias`),
-        runningMean: get(`${prefix}.conv.batch_norm.running_mean`),
-        runningVar: get(`${prefix}.conv.batch_norm.running_var`),
+        weight: bnWeight,
+        bias: bnBias,
+        runningMean: bnRunningMean,
+        runningVar: bnRunningVar,
       },
       pointwise2Weight: get(`${prefix}.conv.pointwise_conv2.weight`),
       pointwise2Bias: tryGet(`${prefix}.conv.pointwise_conv2.bias`),
