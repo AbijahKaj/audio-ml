@@ -57,13 +57,17 @@ export class FastConformerEncoder {
       const convState = state ? state.convStates[i] : null;
 
       const result = this.blocks[i].forwardStreaming(x, cachedK, cachedV, convState);
+      const prevX = x;
       x = result.output;
+      this.backend.dispose(prevX);
       newKVs.push({ k: result.newK, v: result.newV });
       newConvStates.push(result.newConvState);
     }
 
     if (this.finalNormWeight && this.finalNormBias) {
+      const preNorm = x;
       x = this.backend.layerNorm(x, this.finalNormWeight, this.finalNormBias, 1e-5);
+      this.backend.dispose(preNorm);
     }
 
     return {

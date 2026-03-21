@@ -102,70 +102,111 @@ export class MultiHeadAttention {
     cachedV: TensorHandle | null,
     mask?: TensorHandle,
   ): { output: TensorHandle; newK: TensorHandle; newV: TensorHandle } {
+    const temps: TensorHandle[] = [];
+
     const shape = this.backend.getShape(x);
     const B = shape[0] as number;
     const T = shape[1] as number;
 
     const normed = this.backend.layerNorm(x, this.normWeight, this.normBias, 1e-5);
+    temps.push(normed);
 
-    const q = this.splitHeads(this.qProj.forward(normed), B, T);
-    let k = this.splitHeads(this.kProj.forward(normed), B, T);
-    let v = this.splitHeads(this.vProj.forward(normed), B, T);
+    const qRaw = this.qProj.forward(normed);
+    temps.push(qRaw);
+    const q = this.splitHeads(qRaw, B, T);
+    temps.push(q);
+
+    const kRaw = this.kProj.forward(normed);
+    temps.push(kRaw);
+    let kHeads = this.splitHeads(kRaw, B, T);
+    temps.push(kHeads);
+
+    const vRaw = this.vProj.forward(normed);
+    temps.push(vRaw);
+    let vHeads = this.splitHeads(vRaw, B, T);
+    temps.push(vHeads);
 
     if (cachedK && cachedV) {
-      k = this.backend.concat([cachedK, k], 2);
-      v = this.backend.concat([cachedV, v], 2);
+      const kConcat = this.backend.concat([cachedK, kHeads], 2);
+      const vConcat = this.backend.concat([cachedV, vHeads], 2);
+      temps.push(kConcat, vConcat);
+      kHeads = kConcat;
+      vHeads = vConcat;
     }
 
-    const newK = this.backend.clone(k);
-    const newV = this.backend.clone(v);
+    const newK = this.backend.clone(kHeads);
+    const newV = this.backend.clone(vHeads);
 
     const scale = 1.0 / Math.sqrt(this.headDim);
     const biasU = this.backend.reshape(this.posBiasU, [1, this.numHeads, 1, this.headDim]);
+    temps.push(biasU);
     const qWithBiasU = this.backend.add(q, biasU);
-    const kT = this.backend.transpose(k, [0, 1, 3, 2]);
+    temps.push(qWithBiasU);
+    const kT = this.backend.transpose(kHeads, [0, 1, 3, 2]);
+    temps.push(kT);
     let scores = this.backend.matmul(qWithBiasU, kT);
+    temps.push(scores);
 
-    const totalT = this.backend.getShape(k)[2] as number;
+    const totalT = this.backend.getShape(kHeads)[2] as number;
     if (this.posWeight && totalT > 0) {
       const biasV = this.backend.reshape(this.posBiasV, [1, this.numHeads, 1, this.headDim]);
+      temps.push(biasV);
 
       if (T === totalT) {
         const qWithBiasV = this.backend.add(q, biasV);
+        temps.push(qWithBiasV);
         const posEnc = this.posEncoding.forward(totalT);
+        temps.push(posEnc);
         const relScores = this.posEncoding.computeRelativeScores(
           qWithBiasV, posEnc, this.posWeight, this.numHeads, this.headDim
         );
+        temps.push(relScores);
         scores = this.backend.add(scores, relScores);
+        temps.push(scores);
       } else {
-        // Streaming: query has chunk_T frames but keys span totalT frames.
-        // computeRelativeScores + relativeShift assume symmetric T×T, so we
-        // pad the query to totalT, compute full scores, then slice our rows.
         const qPadded = this.backend.pad(q, [[0, 0], [0, 0], [totalT - T, 0], [0, 0]]);
+        temps.push(qPadded);
         const qPaddedBiased = this.backend.add(qPadded, biasV);
+        temps.push(qPaddedBiased);
         const posEnc = this.posEncoding.forward(totalT);
+        temps.push(posEnc);
         const fullRelScores = this.posEncoding.computeRelativeScores(
           qPaddedBiased, posEnc, this.posWeight, this.numHeads, this.headDim
         );
+        temps.push(fullRelScores);
         const relSliced = this.backend.slice(
           fullRelScores, [0, 0, totalT - T, 0], [B, this.numHeads, T, totalT]
         );
+        temps.push(relSliced);
         scores = this.backend.add(scores, relSliced);
+        temps.push(scores);
       }
     }
 
-    scores = this.backend.scale(scores, scale);
+    const scaledScores = this.backend.scale(scores, scale);
+    temps.push(scaledScores);
 
+    let finalScores = scaledScores;
     if (mask) {
       const negInf = this.backend.scalarTensor(-1e9);
-      const maskFill = this.backend.mul(this.backend.ones(this.backend.getShape(scores)), negInf);
-      scores = this.backend.where(mask, scores, maskFill);
+      temps.push(negInf);
+      const onesT = this.backend.ones(this.backend.getShape(scaledScores));
+      temps.push(onesT);
+      const maskFill = this.backend.mul(onesT, negInf);
+      temps.push(maskFill);
+      finalScores = this.backend.where(mask, scaledScores, maskFill);
+      temps.push(finalScores);
     }
 
-    const attnWeights = this.backend.softmax(scores, -1);
-    const attnOut = this.backend.matmul(attnWeights, v);
+    const attnWeights = this.backend.softmax(finalScores, -1);
+    temps.push(attnWeights);
+    const attnOut = this.backend.matmul(attnWeights, vHeads);
+    temps.push(attnOut);
     const merged = this.mergeHeads(attnOut, B, T);
+    temps.push(merged);
     const output = this.outProj.forward(merged);
+
+    for (const t of temps) this.backend.dispose(t);
 
     return { output, newK, newV };
   }
