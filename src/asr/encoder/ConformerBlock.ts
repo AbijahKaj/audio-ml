@@ -49,22 +49,34 @@ export class ConformerBlock {
     newV: TensorHandle;
     newConvState: TensorHandle;
   } {
-    let h = this.backend.add(x, this.backend.scale(this.ffn1.forward(x), 0.5));
+    // tidy() disposes all intermediate tensors created inside the scope
+    // (including those from sub-methods like attn/conv forwardStreaming)
+    // while keeping tensors in the return value alive. This is safe for
+    // all backends including WebGPU where manual disposal can race with
+    // queued GPU operations.
+    return this.backend.tidy(() => {
+      let h = this.backend.add(x, this.backend.scale(this.ffn1.forward(x), 0.5));
 
-    const attnResult = this.attn.forwardStreaming(h, cachedK, cachedV, mask);
-    h = this.backend.add(h, attnResult.output);
+      const attnResult = this.attn.forwardStreaming(h, cachedK, cachedV, mask);
+      h = this.backend.add(h, attnResult.output);
 
-    const convResult = this.conv.forwardStreaming(h, convState);
-    h = this.backend.add(h, convResult.output);
+      const convResult = this.conv.forwardStreaming(h, convState);
+      h = this.backend.add(h, convResult.output);
 
-    h = this.backend.add(h, this.backend.scale(this.ffn2.forward(h), 0.5));
-    h = this.backend.layerNorm(h, this.finalNormWeight, this.finalNormBias, 1e-5);
+      h = this.backend.add(h, this.backend.scale(this.ffn2.forward(h), 0.5));
+      h = this.backend.layerNorm(h, this.finalNormWeight, this.finalNormBias, 1e-5);
 
-    return {
-      output: h,
-      newK: attnResult.newK,
-      newV: attnResult.newV,
-      newConvState: convResult.newConvState,
+      return {
+        output: h,
+        newK: attnResult.newK,
+        newV: attnResult.newV,
+        newConvState: convResult.newConvState,
+      };
+    }) as {
+      output: TensorHandle;
+      newK: TensorHandle;
+      newV: TensorHandle;
+      newConvState: TensorHandle;
     };
   }
 }

@@ -52,6 +52,7 @@ export class ChunkedInference {
 
   private chunkSizeSamples: number;
   private state: StreamingState;
+  private processingLock: Promise<void> = Promise.resolve();
 
   constructor(
     backend: ComputeBackend,
@@ -91,10 +92,22 @@ export class ChunkedInference {
       return null;
     }
 
-    return this.processChunk();
+    // Serialize chunk processing to prevent concurrent access to shared
+    // encoder/decoder state. Without this, overlapping async processChunk
+    // calls can dispose tensors that another call still references.
+    let result: StreamingResult | null = null;
+    const prev = this.processingLock;
+    this.processingLock = prev
+      .then(() => this.processChunk())
+      .then(r => { result = r; });
+    await this.processingLock;
+    return result;
   }
 
   async flush(): Promise<StreamingResult> {
+    // Wait for any in-flight processChunk to complete before flushing
+    await this.processingLock;
+
     if (this.state.audioBuffer.length > 0) {
       const result = await this.processRemaining();
       if (result) return { ...result, isFinal: true };
@@ -112,6 +125,8 @@ export class ChunkedInference {
   reset(): void {
     this.disposeState();
     this.state = this.createInitialState();
+    this.processingLock = Promise.resolve();
+    this.featurePipeline.resetStreamingState();
   }
 
   get currentText(): string {
@@ -128,9 +143,14 @@ export class ChunkedInference {
     const chunkAudio = this.state.audioBuffer.subarray(0, this.chunkSizeSamples);
     this.state.audioBuffer = this.state.audioBuffer.subarray(this.chunkSizeSamples);
 
-    const encoded = this.encodeChunk(chunkAudio);
+    const { encoded, oldEncoderState } = this.encodeChunk(chunkAudio);
     const newTokens = await this.decodeIncremental(encoded);
+
+    // Dispose AFTER decoding: getData() inside the decoder flushes the
+    // GPU command queue, so by this point all encoder GPU operations that
+    // referenced old state buffers have completed.
     this.backend.dispose(encoded);
+    this.disposeEncoderState(oldEncoderState);
 
     if (newTokens.length > 0) {
       this.state.allTokens.push(...newTokens);
@@ -157,9 +177,11 @@ export class ChunkedInference {
       audio = padded;
     }
 
-    const encoded = this.encodeChunk(audio);
+    const { encoded, oldEncoderState } = this.encodeChunk(audio);
     const newTokens = await this.decodeIncremental(encoded);
+
     this.backend.dispose(encoded);
+    this.disposeEncoderState(oldEncoderState);
 
     if (newTokens.length > 0) {
       this.state.allTokens.push(...newTokens);
@@ -176,20 +198,36 @@ export class ChunkedInference {
 
   /**
    * Extract mel features from a chunk and run the encoder with cached state.
-   * Only the new frames are attended to; previous frames are in the KV cache.
+   * Returns both the encoded output and the old encoder state for deferred
+   * disposal (old state must not be freed until GPU operations complete).
    */
-  private encodeChunk(chunkPcm: Float32Array): TensorHandle {
+  private encodeChunk(chunkPcm: Float32Array): {
+    encoded: TensorHandle;
+    oldEncoderState: StreamingEncoderState | null;
+  } {
     let audio = chunkPcm;
     if (this.resampler) {
       audio = this.resampler.resample(audio);
     }
 
-    const mel = this.featurePipeline.extractFeatures(audio);
-    const { output, newState } = this.encoder.forwardStreaming(mel, this.state.encoderState);
+    const mel = this.featurePipeline.extractStreamingFeatures(audio);
+    const oldEncoderState = this.state.encoderState;
+    const { output, newState } = this.encoder.forwardStreaming(mel, oldEncoderState);
     this.backend.dispose(mel);
 
     this.state.encoderState = newState;
-    return output;
+    return { encoded: output, oldEncoderState };
+  }
+
+  private disposeEncoderState(state: StreamingEncoderState | null): void {
+    if (!state) return;
+    for (const { k, v } of state.cachedKV) {
+      this.backend.dispose(k);
+      this.backend.dispose(v);
+    }
+    for (const s of state.convStates) {
+      this.backend.dispose(s);
+    }
   }
 
   /**
@@ -248,7 +286,7 @@ export class ChunkedInference {
       audioBuffer: new Float32Array(0),
       encoderState: null,
       decoderState: null,
-      lastToken: 0,
+      lastToken: this.config.vocabSize - 1, // blank token (NeMo convention)
       tdtFrameOffset: 0,
       allTokens: [],
     };

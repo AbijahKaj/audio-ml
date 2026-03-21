@@ -5,7 +5,7 @@
  * SpeechRecognizer and displays live transcription results.
  */
 
-import { SpeechRecognizer, type ASRResult } from 'audio-ml/asr';
+import { SpeechRecognizer, type ASRResult, Endpointer } from 'audio-ml/asr';
 import { AudioInput } from '../components/AudioInput';
 import { AudioInputUI } from '../components/AudioInputUI';
 
@@ -155,7 +155,10 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
 
   const header = el('div', 'asr-header');
   header.innerHTML = `<h2 class="asr-title">Speech Recognition</h2>
-    <p class="asr-subtitle">FastConformer RNNT / TDT &mdash; runs entirely in the browser via TensorFlow.js</p>`;
+    <p class="asr-subtitle">FastConformer RNNT / TDT &mdash; runs entirely in the browser via TensorFlow.js</p>
+    <p class="asr-subtitle" style="font-size:0.85rem;opacity:0.7;margin-top:0.25rem">
+      Record or upload audio &rarr; streaming preview during recording &rarr; accurate offline transcription on stop
+    </p>`;
   wrapper.appendChild(header);
 
   // model loading section
@@ -293,7 +296,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
         backendOptions: { wasmPathPrefix: '/tfjs-wasm/' },
         inputSampleRate: INPUT_SAMPLE_RATE,
         streaming: true,
-        chunkSizeMs: 320,
+        chunkSizeMs: 2000,
       });
 
       await recognizer.loadFromBuffers(modelBuf, configJson, vocabJson);
@@ -320,44 +323,94 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     audioInput = new AudioInput(INPUT_SAMPLE_RATE);
     new AudioInputUI(audioSection, audioInput);
 
+    // VAD endpointer detects pauses and triggers offline transcription
+    // of each utterance segment for accurate results while recording.
+    const endpointer = new Endpointer({
+      sampleRate: INPUT_SAMPLE_RATE,
+      silenceTimeoutMs: 1200,
+    });
+
+    let utteranceChunks: Float32Array[] = [];
+    let allChunks: Float32Array[] = [];
+    let transcribing = false;
+
+    async function transcribeUtterance() {
+      if (!recognizer || utteranceChunks.length === 0 || transcribing) return;
+      transcribing = true;
+
+      const totalLen = utteranceChunks.reduce((s, c) => s + c.length, 0);
+      const audio = new Float32Array(totalLen);
+      let off = 0;
+      for (const c of utteranceChunks) { audio.set(c, off); off += c.length; }
+      utteranceChunks = [];
+
+      const audioDurationS = totalLen / INPUT_SAMPLE_RATE;
+      if (audioDurationS < 0.3) { transcribing = false; return; }
+
+      partialLine.textContent = `Transcribing ${audioDurationS.toFixed(1)}s\u2026`;
+      const result = await recognizer.transcribe(audio);
+      if (result.text.trim()) {
+        appendTranscript(result, audioDurationS);
+      }
+      partialLine.textContent = '';
+      recognizer.reset();
+      transcribing = false;
+    }
+
     audioInput.on('pcm-data', async (pcm: Float32Array) => {
       if (!recognizer) return;
+      const copy = new Float32Array(pcm);
+      utteranceChunks.push(copy);
+      allChunks.push(copy);
+
+      // VAD-based utterance segmentation
+      const event = endpointer.processFrame(pcm);
+      if (event === 'speech') {
+        const dur = utteranceChunks.reduce((s, c) => s + c.length, 0) / INPUT_SAMPLE_RATE;
+        partialLine.textContent = `Recording\u2026 (${dur.toFixed(1)}s)`;
+      } else if (event === 'speech-end') {
+        transcribeUtterance();
+      }
+
+      // Also feed streaming for live preview text
       const result = await recognizer.processFrameAsync(pcm);
-      if (result) {
-        partialLine.textContent = result.text;
-        latencyLabel.textContent = `Latency: ${Math.round(result.latencyMs)} ms | Decoder: ${result.decoderType.toUpperCase()}`;
+      if (result && result.text.trim()) {
+        latencyLabel.textContent = `Preview: ${result.text}`;
       }
     });
 
     audioInput.on('start', () => {
-      partialLine.textContent = '';
+      utteranceChunks = [];
+      allChunks = [];
+      endpointer.reset();
+      partialLine.textContent = '(listening\u2026)';
+      latencyLabel.textContent = '';
       recognizer?.start();
     });
 
     audioInput.on('stop', async () => {
       if (!recognizer) return;
-      const final = await recognizer.finalizeUtterance();
-      if (final.text.trim()) {
-        appendTranscript(final);
+
+      // Transcribe any remaining audio in the current utterance
+      if (utteranceChunks.length > 0) {
+        await transcribeUtterance();
       }
+
       partialLine.textContent = '';
+      latencyLabel.textContent = '';
       recognizer.reset();
-    });
-
-    recognizer?.on('partial', (data: { text: string }) => {
-      partialLine.textContent = data.text;
-    });
-
-    recognizer?.on('final', (result: ASRResult) => {
-      appendTranscript(result);
-      partialLine.textContent = '';
     });
   }
 
-  function appendTranscript(result: ASRResult) {
+  function appendTranscript(result: ASRResult, audioDurationS?: number) {
     const entry = el('div', 'asr-transcript-entry');
     const time = new Date().toLocaleTimeString();
-    const meta = `${Math.round(result.latencyMs)} ms · ${result.decoderType.toUpperCase()} · ${result.tokenCount} tokens`;
+    const inferMs = Math.round(result.latencyMs);
+    let meta = `${inferMs} ms · ${result.decoderType.toUpperCase()} · ${result.tokenCount} tokens`;
+    if (audioDurationS && audioDurationS > 0) {
+      const rtf = (result.latencyMs / 1000 / audioDurationS).toFixed(2);
+      meta += ` · ${audioDurationS.toFixed(1)}s audio · RTF ${rtf}x`;
+    }
     entry.innerHTML = `<span class="asr-transcript-time">[${time}]</span> ${escapeHtml(result.text)} <span class="asr-transcript-meta">${meta}</span>`;
     transcriptLog.prepend(entry);
   }

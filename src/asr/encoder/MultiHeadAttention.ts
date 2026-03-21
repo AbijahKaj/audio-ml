@@ -138,9 +138,6 @@ export class MultiHeadAttention {
         );
         scores = this.backend.add(scores, relScores);
       } else {
-        // Streaming: query has chunk_T frames but keys span totalT frames.
-        // computeRelativeScores + relativeShift assume symmetric T×T, so we
-        // pad the query to totalT, compute full scores, then slice our rows.
         const qPadded = this.backend.pad(q, [[0, 0], [0, 0], [totalT - T, 0], [0, 0]]);
         const qPaddedBiased = this.backend.add(qPadded, biasV);
         const posEnc = this.posEncoding.forward(totalT);

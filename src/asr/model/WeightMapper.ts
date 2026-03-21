@@ -37,8 +37,8 @@ export interface ConvModuleWeights {
   batchNorm: {
     weight: TensorHandle;
     bias: TensorHandle;
-    runningMean: TensorHandle;
-    runningVar: TensorHandle;
+    runningMean: TensorHandle | null;
+    runningVar: TensorHandle | null;
   };
   pointwise2Weight: TensorHandle;
   pointwise2Bias: TensorHandle | null;
@@ -92,7 +92,7 @@ export interface ModelWeights {
 
 export function mapWeights(
   weights: Map<string, TensorHandle>,
-  config: FastConformerConfig
+  config: FastConformerConfig,
 ): ModelWeights {
   const consumed = new Set<string>();
 
@@ -184,6 +184,13 @@ export function mapWeights(
     // num_batches_tracked is a scalar tracking counter, not a model weight
     tryGet(`${prefix}.conv.batch_norm.num_batches_tracked`);
 
+    const bnWeight = get(`${prefix}.conv.batch_norm.weight`);
+    const bnBias = get(`${prefix}.conv.batch_norm.bias`);
+    // Running stats may be absent (some checkpoints export only learned
+    // params, not buffers). When null, ConvModule uses instance normalization.
+    const bnRunningMean = tryGet(`${prefix}.conv.batch_norm.running_mean`);
+    const bnRunningVar = tryGet(`${prefix}.conv.batch_norm.running_var`);
+
     const conv: ConvModuleWeights = {
       norm: getLayerNorm(`${prefix}.norm_conv`),
       pointwise1Weight: get(`${prefix}.conv.pointwise_conv1.weight`),
@@ -191,10 +198,10 @@ export function mapWeights(
       depthwiseWeight: get(`${prefix}.conv.depthwise_conv.weight`),
       depthwiseBias: tryGet(`${prefix}.conv.depthwise_conv.bias`),
       batchNorm: {
-        weight: get(`${prefix}.conv.batch_norm.weight`),
-        bias: get(`${prefix}.conv.batch_norm.bias`),
-        runningMean: get(`${prefix}.conv.batch_norm.running_mean`),
-        runningVar: get(`${prefix}.conv.batch_norm.running_var`),
+        weight: bnWeight,
+        bias: bnBias,
+        runningMean: bnRunningMean,
+        runningVar: bnRunningVar,
       },
       pointwise2Weight: get(`${prefix}.conv.pointwise_conv2.weight`),
       pointwise2Bias: tryGet(`${prefix}.conv.pointwise_conv2.bias`),
