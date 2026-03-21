@@ -62,8 +62,10 @@ export class FeaturePipeline {
       }
     }
 
-    const features = this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
-    return this.normalizeFeatures(features);
+    const rawFeatures = this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
+    const normalized = this.normalizeFeatures(rawFeatures);
+    this.backend.dispose(rawFeatures);
+    return normalized;
   }
 
   extractStreamingFeatures(audio: Float32Array): TensorHandle {
