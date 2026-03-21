@@ -25,3 +25,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test model files (large binary)
+test_model/
+exported/
+*.safetensors
+*.ckpt
+*.nemo

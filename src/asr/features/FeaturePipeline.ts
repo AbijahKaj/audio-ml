@@ -1,0 +1,246 @@
+import FFT from 'fft.js';
+import type { ComputeBackend } from '../compute/Backend';
+import type { TensorHandle } from '../compute/types';
+import type { FastConformerConfig } from '../model/ModelConfig';
+
+export class FeaturePipeline {
+  private backend: ComputeBackend;
+  private fftSize: number;
+  private windowSize: number;
+  private hopSize: number;
+  private numMelBands: number;
+  private sampleRate: number;
+  private fft: FFT;
+  private melFilters: Float32Array[];
+  private hannWindow: Float32Array;
+  private dither: number = 1e-5;
+  private normalizeMode: 'per_feature' | 'NA';
+
+  // Running normalization state for streaming
+  private runningSum: Float64Array;
+  private runningSumSq: Float64Array;
+  private runningFrames: number = 0;
+
+  constructor(config: FastConformerConfig, backend: ComputeBackend) {
+    this.backend = backend;
+    this.sampleRate = config.sampleRate;
+    this.numMelBands = config.numMelBands;
+    this.windowSize = Math.round(config.sampleRate * config.windowSizeMs / 1000);
+    this.hopSize = Math.round(config.sampleRate * config.hopSizeMs / 1000);
+
+    this.fftSize = 1;
+    while (this.fftSize < this.windowSize) this.fftSize *= 2;
+
+    this.fft = new FFT(this.fftSize);
+    this.hannWindow = this.createHannWindow(this.windowSize);
+    this.melFilters = this.createMelFilterBank();
+    this.normalizeMode = config.normalize ?? 'per_feature';
+
+    this.runningSum = new Float64Array(this.numMelBands);
+    this.runningSumSq = new Float64Array(this.numMelBands);
+  }
+
+  extractFeatures(audio: Float32Array): TensorHandle {
+    const melFeatures = this.computeRawMel(audio);
+    const numFrames = melFeatures.length / this.numMelBands;
+    if (this.normalizeMode === 'NA') {
+      return this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
+    }
+    const rawFeatures = this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
+    const normalized = this.normalizeFeatures(rawFeatures);
+    this.backend.dispose(rawFeatures);
+    return normalized;
+  }
+
+  /**
+   * Extract features for streaming with running normalization.
+   * Accumulates per-band statistics across all chunks so normalization
+   * is consistent with the model's training (utterance-level stats)
+   * rather than per-chunk stats which distort early chunks.
+   */
+  extractStreamingFeatures(audio: Float32Array): TensorHandle {
+    const melFeatures = this.computeRawMel(audio);
+    const numFrames = melFeatures.length / this.numMelBands;
+
+    if (this.normalizeMode === 'NA') {
+      return this.backend.tensor(melFeatures, [1, numFrames, this.numMelBands]);
+    }
+
+    // Update running statistics
+    for (let f = 0; f < numFrames; f++) {
+      for (let m = 0; m < this.numMelBands; m++) {
+        const val = melFeatures[f * this.numMelBands + m];
+        this.runningSum[m] += val;
+        this.runningSumSq[m] += val * val;
+      }
+    }
+    this.runningFrames += numFrames;
+
+    // Normalize using accumulated statistics
+    const normalized = new Float32Array(melFeatures.length);
+    for (let m = 0; m < this.numMelBands; m++) {
+      const mean = this.runningSum[m] / this.runningFrames;
+      const variance = this.runningSumSq[m] / this.runningFrames - mean * mean;
+      const invStd = 1.0 / Math.sqrt(Math.max(variance, 1e-5));
+      for (let f = 0; f < numFrames; f++) {
+        normalized[f * this.numMelBands + m] =
+          (melFeatures[f * this.numMelBands + m] - mean) * invStd;
+      }
+    }
+
+    return this.backend.tensor(normalized, [1, numFrames, this.numMelBands]);
+  }
+
+  resetStreamingState(): void {
+    this.runningSum.fill(0);
+    this.runningSumSq.fill(0);
+    this.runningFrames = 0;
+  }
+
+  get frameLength(): number {
+    return this.windowSize;
+  }
+
+  get frameShift(): number {
+    return this.hopSize;
+  }
+
+  get numBands(): number {
+    return this.numMelBands;
+  }
+
+  private computeRawMel(audio: Float32Array): Float32Array {
+    const dithered = this.applyDither(audio);
+    const frames = this.frameSignal(dithered);
+    const numFrames = frames.length;
+    const melFeatures = new Float32Array(numFrames * this.numMelBands);
+
+    for (let f = 0; f < numFrames; f++) {
+      const windowed = this.applyWindow(frames[f]);
+      const paddedFrame = new Float32Array(this.fftSize);
+      paddedFrame.set(windowed);
+
+      const spectrum = this.fft.createComplexArray();
+      this.fft.realTransform(spectrum, paddedFrame);
+      this.fft.completeSpectrum(spectrum);
+
+      const powerSpectrum = new Float32Array(this.fftSize / 2 + 1);
+      for (let i = 0; i <= this.fftSize / 2; i++) {
+        const re = spectrum[2 * i];
+        const im = spectrum[2 * i + 1];
+        powerSpectrum[i] = re * re + im * im;
+      }
+
+      for (let m = 0; m < this.numMelBands; m++) {
+        let energy = 0;
+        const filter = this.melFilters[m];
+        for (let k = 0; k < filter.length; k++) {
+          energy += filter[k] * powerSpectrum[k];
+        }
+        melFeatures[f * this.numMelBands + m] = Math.log(Math.max(energy, 1e-10));
+      }
+    }
+
+    return melFeatures;
+  }
+
+  private applyDither(signal: Float32Array): Float32Array {
+    if (this.dither <= 0) return signal;
+    const output = new Float32Array(signal.length);
+    for (let i = 0; i < signal.length; i++) {
+      output[i] = signal[i] + this.dither * (Math.random() * 2 - 1);
+    }
+    return output;
+  }
+
+  private frameSignal(signal: Float32Array): Float32Array[] {
+    const frames: Float32Array[] = [];
+    const numFrames = Math.max(0, Math.floor((signal.length - this.windowSize) / this.hopSize) + 1);
+    for (let i = 0; i < numFrames; i++) {
+      const start = i * this.hopSize;
+      frames.push(signal.slice(start, start + this.windowSize));
+    }
+    return frames;
+  }
+
+  private applyWindow(frame: Float32Array): Float32Array {
+    const windowed = new Float32Array(frame.length);
+    for (let i = 0; i < frame.length; i++) {
+      windowed[i] = frame[i] * this.hannWindow[i];
+    }
+    return windowed;
+  }
+
+  private createHannWindow(size: number): Float32Array {
+    const window = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+      window[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (size - 1)));
+    }
+    return window;
+  }
+
+  /**
+   * Per-feature normalization: normalize each mel band independently
+   * to mean=0, std=1 across the time dimension.
+   */
+  private normalizeFeatures(features: TensorHandle): TensorHandle {
+    return this.backend.tidy(() => {
+      // features: [B, T, mel_bands]
+      // Compute mean and variance per feature band (across time dim=1)
+      const mean = this.backend.mean(features, [1], true); // [B, 1, mel_bands]
+      const centered = this.backend.sub(features, mean);
+      const variance = this.backend.mean(
+        this.backend.mul(centered, centered),
+        [1],
+        true
+      ); // [B, 1, mel_bands]
+      const std = this.backend.sqrt(this.backend.add(variance, this.backend.scalarTensor(1e-5)));
+      return this.backend.div(centered, std);
+    });
+  }
+
+  private createMelFilterBank(): Float32Array[] {
+    const filters: Float32Array[] = [];
+    const numBins = this.fftSize / 2 + 1;
+    const lowFreq = 0;
+    const highFreq = this.sampleRate / 2;
+    const melLow = this.hzToMel(lowFreq);
+    const melHigh = this.hzToMel(highFreq);
+
+    const melPoints: number[] = [];
+    for (let i = 0; i <= this.numMelBands + 1; i++) {
+      melPoints.push(melLow + (melHigh - melLow) * i / (this.numMelBands + 1));
+    }
+    const hzPoints = melPoints.map(m => this.melToHz(m));
+    const binPoints = hzPoints.map(hz => Math.floor((this.fftSize + 1) * hz / this.sampleRate));
+
+    for (let i = 0; i < this.numMelBands; i++) {
+      const filter = new Float32Array(numBins);
+      const lower = binPoints[i];
+      const center = binPoints[i + 1];
+      const upper = binPoints[i + 2];
+
+      for (let j = lower; j < center; j++) {
+        if (center !== lower) {
+          filter[j] = (j - lower) / (center - lower);
+        }
+      }
+      for (let j = center; j < upper; j++) {
+        if (upper !== center) {
+          filter[j] = (upper - j) / (upper - center);
+        }
+      }
+      filters.push(filter);
+    }
+
+    return filters;
+  }
+
+  private hzToMel(hz: number): number {
+    return 2595 * Math.log10(1 + hz / 700);
+  }
+
+  private melToHz(mel: number): number {
+    return 700 * (Math.pow(10, mel / 2595) - 1);
+  }
+}
