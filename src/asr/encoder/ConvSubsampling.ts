@@ -22,6 +22,7 @@ export class ConvSubsampling {
   private convBiases: TensorHandle[];
   private outWeight: TensorHandle;
   private outBias: TensorHandle;
+  private expectedFlatDim: number;
 
   constructor(backend: ComputeBackend, weights: SubsamplingWeights, _config: FastConformerConfig) {
     this.b = backend;
@@ -29,6 +30,8 @@ export class ConvSubsampling {
     this.convBiases = weights.allConvBiases;
     this.outWeight = weights.outWeight;
     this.outBias = weights.outBias;
+    // Infer expected flattened dim (C*F') from the output weight shape [d_model, C*F']
+    this.expectedFlatDim = backend.getShape(weights.outWeight)[1] as number;
   }
 
   forward(melFeatures: TensorHandle): TensorHandle {
@@ -65,7 +68,17 @@ export class ConvSubsampling {
 
       // NeMo: x.transpose(1,2).reshape(b,t,-1) → [B, T', C*F']
       const xPerm = this.b.transpose(xNchw, [0, 2, 1, 3]);
-      const xFlat = this.b.reshape(xPerm, [B, Tp, C * Fp]);
+      let xFlat = this.b.reshape(xPerm, [B, Tp, C * Fp]);
+
+      // Some NeMo checkpoints expect a slightly different flattened dim
+      // (e.g. 128 mel → 256*17=4352 vs computed 256*16=4096) due to
+      // mel preprocessing differences. Pad with zeros to match.
+      const actualDim = C * Fp;
+      if (actualDim < this.expectedFlatDim) {
+        xFlat = this.b.pad(xFlat, [[0, 0], [0, 0], [0, this.expectedFlatDim - actualDim]]);
+      } else if (actualDim > this.expectedFlatDim) {
+        xFlat = this.b.slice(xFlat, [0, 0, 0], [B, Tp, this.expectedFlatDim]);
+      }
 
       // Linear projection to d_model
       const wT = this.b.transpose(this.outWeight, [1, 0]);
