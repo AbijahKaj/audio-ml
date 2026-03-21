@@ -155,7 +155,10 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
 
   const header = el('div', 'asr-header');
   header.innerHTML = `<h2 class="asr-title">Speech Recognition</h2>
-    <p class="asr-subtitle">FastConformer RNNT / TDT &mdash; runs entirely in the browser via TensorFlow.js</p>`;
+    <p class="asr-subtitle">FastConformer RNNT / TDT &mdash; runs entirely in the browser via TensorFlow.js</p>
+    <p class="asr-subtitle" style="font-size:0.85rem;opacity:0.7;margin-top:0.25rem">
+      Record or upload audio &rarr; streaming preview during recording &rarr; accurate offline transcription on stop
+    </p>`;
   wrapper.appendChild(header);
 
   // model loading section
@@ -293,7 +296,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
         backendOptions: { wasmPathPrefix: '/tfjs-wasm/' },
         inputSampleRate: INPUT_SAMPLE_RATE,
         streaming: true,
-        chunkSizeMs: 320,
+        chunkSizeMs: 2000,
       });
 
       await recognizer.loadFromBuffers(modelBuf, configJson, vocabJson);
@@ -320,27 +323,59 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     audioInput = new AudioInput(INPUT_SAMPLE_RATE);
     new AudioInputUI(audioSection, audioInput);
 
+    // Accumulate all raw PCM for offline transcription on stop
+    let recordedChunks: Float32Array[] = [];
+
     audioInput.on('pcm-data', async (pcm: Float32Array) => {
       if (!recognizer) return;
+      recordedChunks.push(new Float32Array(pcm));
+
+      // Feed streaming for partial results (best-effort preview)
       const result = await recognizer.processFrameAsync(pcm);
       if (result) {
-        partialLine.textContent = result.text;
-        latencyLabel.textContent = `Latency: ${Math.round(result.latencyMs)} ms | Decoder: ${result.decoderType.toUpperCase()}`;
+        partialLine.textContent = result.text || '(listening\u2026)';
+        latencyLabel.textContent = `Streaming chunk: ${Math.round(result.latencyMs)} ms | ${result.decoderType.toUpperCase()}`;
       }
     });
 
     audioInput.on('start', () => {
-      partialLine.textContent = '';
+      recordedChunks = [];
+      partialLine.textContent = '(listening\u2026)';
+      latencyLabel.textContent = '';
       recognizer?.start();
     });
 
     audioInput.on('stop', async () => {
       if (!recognizer) return;
-      const final = await recognizer.finalizeUtterance();
-      if (final.text.trim()) {
-        appendTranscript(final);
+
+      // Combine all recorded audio into one buffer
+      const totalLen = recordedChunks.reduce((s, c) => s + c.length, 0);
+      if (totalLen === 0) {
+        partialLine.textContent = '';
+        recognizer.reset();
+        return;
+      }
+
+      const fullAudio = new Float32Array(totalLen);
+      let offset = 0;
+      for (const chunk of recordedChunks) {
+        fullAudio.set(chunk, offset);
+        offset += chunk.length;
+      }
+      recordedChunks = [];
+      const audioDurationS = totalLen / INPUT_SAMPLE_RATE;
+
+      partialLine.textContent = `Transcribing ${audioDurationS.toFixed(1)}s of audio\u2026`;
+      latencyLabel.textContent = '';
+
+      // Run full offline transcription for accurate results
+      const result = await recognizer.transcribe(fullAudio);
+
+      if (result.text.trim()) {
+        appendTranscript(result, audioDurationS);
       }
       partialLine.textContent = '';
+      latencyLabel.textContent = '';
       recognizer.reset();
     });
 
@@ -354,10 +389,15 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     });
   }
 
-  function appendTranscript(result: ASRResult) {
+  function appendTranscript(result: ASRResult, audioDurationS?: number) {
     const entry = el('div', 'asr-transcript-entry');
     const time = new Date().toLocaleTimeString();
-    const meta = `${Math.round(result.latencyMs)} ms · ${result.decoderType.toUpperCase()} · ${result.tokenCount} tokens`;
+    const inferMs = Math.round(result.latencyMs);
+    let meta = `${inferMs} ms · ${result.decoderType.toUpperCase()} · ${result.tokenCount} tokens`;
+    if (audioDurationS && audioDurationS > 0) {
+      const rtf = (result.latencyMs / 1000 / audioDurationS).toFixed(2);
+      meta += ` · ${audioDurationS.toFixed(1)}s audio · RTF ${rtf}x`;
+    }
     entry.innerHTML = `<span class="asr-transcript-time">[${time}]</span> ${escapeHtml(result.text)} <span class="asr-transcript-meta">${meta}</span>`;
     transcriptLog.prepend(entry);
   }
