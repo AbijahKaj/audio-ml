@@ -142,9 +142,14 @@ export class ChunkedInference {
     const chunkAudio = this.state.audioBuffer.subarray(0, this.chunkSizeSamples);
     this.state.audioBuffer = this.state.audioBuffer.subarray(this.chunkSizeSamples);
 
-    const encoded = this.encodeChunk(chunkAudio);
+    const { encoded, oldEncoderState } = this.encodeChunk(chunkAudio);
     const newTokens = await this.decodeIncremental(encoded);
+
+    // Dispose AFTER decoding: getData() inside the decoder flushes the
+    // GPU command queue, so by this point all encoder GPU operations that
+    // referenced old state buffers have completed.
     this.backend.dispose(encoded);
+    this.disposeEncoderState(oldEncoderState);
 
     if (newTokens.length > 0) {
       this.state.allTokens.push(...newTokens);
@@ -171,9 +176,11 @@ export class ChunkedInference {
       audio = padded;
     }
 
-    const encoded = this.encodeChunk(audio);
+    const { encoded, oldEncoderState } = this.encodeChunk(audio);
     const newTokens = await this.decodeIncremental(encoded);
+
     this.backend.dispose(encoded);
+    this.disposeEncoderState(oldEncoderState);
 
     if (newTokens.length > 0) {
       this.state.allTokens.push(...newTokens);
@@ -190,9 +197,13 @@ export class ChunkedInference {
 
   /**
    * Extract mel features from a chunk and run the encoder with cached state.
-   * Only the new frames are attended to; previous frames are in the KV cache.
+   * Returns both the encoded output and the old encoder state for deferred
+   * disposal (old state must not be freed until GPU operations complete).
    */
-  private encodeChunk(chunkPcm: Float32Array): TensorHandle {
+  private encodeChunk(chunkPcm: Float32Array): {
+    encoded: TensorHandle;
+    oldEncoderState: StreamingEncoderState | null;
+  } {
     let audio = chunkPcm;
     if (this.resampler) {
       audio = this.resampler.resample(audio);
@@ -204,8 +215,7 @@ export class ChunkedInference {
     this.backend.dispose(mel);
 
     this.state.encoderState = newState;
-    this.disposeEncoderState(oldEncoderState);
-    return output;
+    return { encoded: output, oldEncoderState };
   }
 
   private disposeEncoderState(state: StreamingEncoderState | null): void {

@@ -49,41 +49,34 @@ export class ConformerBlock {
     newV: TensorHandle;
     newConvState: TensorHandle;
   } {
-    const temps: TensorHandle[] = [];
+    // tidy() disposes all intermediate tensors created inside the scope
+    // (including those from sub-methods like attn/conv forwardStreaming)
+    // while keeping tensors in the return value alive. This is safe for
+    // all backends including WebGPU where manual disposal can race with
+    // queued GPU operations.
+    return this.backend.tidy(() => {
+      let h = this.backend.add(x, this.backend.scale(this.ffn1.forward(x), 0.5));
 
-    const ffn1Out = this.ffn1.forward(x);
-    const ffn1Scaled = this.backend.scale(ffn1Out, 0.5);
-    temps.push(ffn1Out, ffn1Scaled);
-    let h = this.backend.add(x, ffn1Scaled);
-    temps.push(h);
+      const attnResult = this.attn.forwardStreaming(h, cachedK, cachedV, mask);
+      h = this.backend.add(h, attnResult.output);
 
-    const attnResult = this.attn.forwardStreaming(h, cachedK, cachedV, mask);
-    temps.push(attnResult.output);
-    const h2 = this.backend.add(h, attnResult.output);
-    temps.push(h2);
-    h = h2;
+      const convResult = this.conv.forwardStreaming(h, convState);
+      h = this.backend.add(h, convResult.output);
 
-    const convResult = this.conv.forwardStreaming(h, convState);
-    temps.push(convResult.output);
-    const h3 = this.backend.add(h, convResult.output);
-    temps.push(h3);
-    h = h3;
+      h = this.backend.add(h, this.backend.scale(this.ffn2.forward(h), 0.5));
+      h = this.backend.layerNorm(h, this.finalNormWeight, this.finalNormBias, 1e-5);
 
-    const ffn2Out = this.ffn2.forward(h);
-    const ffn2Scaled = this.backend.scale(ffn2Out, 0.5);
-    temps.push(ffn2Out, ffn2Scaled);
-    const h4 = this.backend.add(h, ffn2Scaled);
-    temps.push(h4);
-
-    const output = this.backend.layerNorm(h4, this.finalNormWeight, this.finalNormBias, 1e-5);
-
-    for (const t of temps) this.backend.dispose(t);
-
-    return {
-      output,
-      newK: attnResult.newK,
-      newV: attnResult.newV,
-      newConvState: convResult.newConvState,
+      return {
+        output: h,
+        newK: attnResult.newK,
+        newV: attnResult.newV,
+        newConvState: convResult.newConvState,
+      };
+    }) as {
+      output: TensorHandle;
+      newK: TensorHandle;
+      newV: TensorHandle;
+      newConvState: TensorHandle;
     };
   }
 }

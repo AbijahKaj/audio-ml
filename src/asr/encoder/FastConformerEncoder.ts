@@ -46,37 +46,41 @@ export class FastConformerEncoder {
     melFeatures: TensorHandle,
     state: StreamingEncoderState | null,
   ): { output: TensorHandle; newState: StreamingEncoderState } {
-    let x = this.subsampling.forward(melFeatures);
+    // Outer tidy() manages all intermediate tensors (subsampling output,
+    // per-block outputs, etc.) across the full forward pass. Each
+    // ConformerBlock also uses an inner tidy() for its own intermediates.
+    // The nested tidy scopes compose correctly: inner tidy disposes block
+    // intermediates while the outer tidy disposes block-to-block
+    // intermediates. Only the final output and state tensors survive.
+    return this.backend.tidy(() => {
+      let x = this.subsampling.forward(melFeatures);
 
-    const newKVs: Array<{ k: TensorHandle; v: TensorHandle }> = [];
-    const newConvStates: TensorHandle[] = [];
+      const newKVs: Array<{ k: TensorHandle; v: TensorHandle }> = [];
+      const newConvStates: TensorHandle[] = [];
 
-    for (let i = 0; i < this.blocks.length; i++) {
-      const cachedK = state ? state.cachedKV[i].k : null;
-      const cachedV = state ? state.cachedKV[i].v : null;
-      const convState = state ? state.convStates[i] : null;
+      for (let i = 0; i < this.blocks.length; i++) {
+        const cachedK = state ? state.cachedKV[i].k : null;
+        const cachedV = state ? state.cachedKV[i].v : null;
+        const convState = state ? state.convStates[i] : null;
 
-      const result = this.blocks[i].forwardStreaming(x, cachedK, cachedV, convState);
-      const prevX = x;
-      x = result.output;
-      this.backend.dispose(prevX);
-      newKVs.push({ k: result.newK, v: result.newV });
-      newConvStates.push(result.newConvState);
-    }
+        const result = this.blocks[i].forwardStreaming(x, cachedK, cachedV, convState);
+        x = result.output;
+        newKVs.push({ k: result.newK, v: result.newV });
+        newConvStates.push(result.newConvState);
+      }
 
-    if (this.finalNormWeight && this.finalNormBias) {
-      const preNorm = x;
-      x = this.backend.layerNorm(x, this.finalNormWeight, this.finalNormBias, 1e-5);
-      this.backend.dispose(preNorm);
-    }
+      if (this.finalNormWeight && this.finalNormBias) {
+        x = this.backend.layerNorm(x, this.finalNormWeight, this.finalNormBias, 1e-5);
+      }
 
-    return {
-      output: x,
-      newState: {
-        cachedKV: newKVs,
-        convStates: newConvStates,
-      },
-    };
+      return {
+        output: x,
+        newState: {
+          cachedKV: newKVs,
+          convStates: newConvStates,
+        },
+      };
+    }) as { output: TensorHandle; newState: StreamingEncoderState };
   }
 
   createInitialState(): StreamingEncoderState {

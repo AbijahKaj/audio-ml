@@ -67,19 +67,11 @@ export class ConvModule {
     output: TensorHandle;
     newConvState: TensorHandle;
   } {
-    const temps: TensorHandle[] = [];
-
     let h = this.backend.layerNorm(x, this.normWeight, this.normBias, 1e-5);
-    temps.push(h);
     h = this.conv1d(h, this.pw1Weight, this.pw1Bias);
-    temps.push(h);
 
     const parts = this.backend.split(h, 2, -1);
-    temps.push(parts[0], parts[1]);
-    const sig = this.backend.sigmoid(parts[1]);
-    temps.push(sig);
-    h = this.backend.mul(parts[0], sig);
-    temps.push(h);
+    h = this.backend.mul(parts[0], this.backend.sigmoid(parts[1]));
 
     const B = this.backend.getShape(h)[0] as number;
     const chunkLen = this.backend.getShape(x)[1] as number;
@@ -87,10 +79,7 @@ export class ConvModule {
     const stateLen = this.kernelSize - 1;
 
     const state = convState ?? this.backend.zeros([B, stateLen, C]);
-    if (!convState) temps.push(state);
-    const concatenated = this.backend.concat([state, h], 1);
-    temps.push(concatenated);
-    h = concatenated;
+    h = this.backend.concat([state, h], 1);
 
     const totalLen = this.backend.getShape(h)[1] as number;
 
@@ -101,24 +90,17 @@ export class ConvModule {
     );
 
     h = this.depthwiseConvNoPad(h);
-    temps.push(h);
 
     const convOutLen = this.backend.getShape(h)[1] as number;
     if (convOutLen > chunkLen) {
-      const sliced = this.backend.slice(h, [0, convOutLen - chunkLen, 0], [B, chunkLen, C]);
-      temps.push(sliced);
-      h = sliced;
+      h = this.backend.slice(h, [0, convOutLen - chunkLen, 0], [B, chunkLen, C]);
     }
 
     h = this.backend.batchNorm(h, this.bnMean, this.bnVar, this.bnWeight, this.bnBias, 1e-5);
-    temps.push(h);
     h = this.backend.silu(h);
-    temps.push(h);
-    const output = this.conv1d(h, this.pw2Weight, this.pw2Bias);
+    h = this.conv1d(h, this.pw2Weight, this.pw2Bias);
 
-    for (const t of temps) this.backend.dispose(t);
-
-    return { output, newConvState };
+    return { output: h, newConvState };
   }
 
   /**
