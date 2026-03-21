@@ -15,6 +15,9 @@ export class RelativePositionalEncoding {
    * Returns tensor of shape [1, 2*T-1, d_model] for relative positions.
    */
   forward(length: number): TensorHandle {
+    if (length <= 0) {
+      return this.backend.tensor(new Float32Array(0), [1, 0, this.dModel]);
+    }
     return this.backend.tidy(() => {
       const posLen = 2 * length - 1;
       const pe = new Float32Array(posLen * this.dModel);

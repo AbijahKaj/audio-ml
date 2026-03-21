@@ -71,7 +71,7 @@ export class MultiHeadAttention {
       let contentScores = this.backend.matmul(qWithBiasU, kT);
 
       // Position-based attention: (Q + pos_bias_v) * pos_encoding^T
-      if (this.posWeight) {
+      if (this.posWeight && T > 0) {
         const qWithBiasV = this.backend.add(q, biasV);
         const posEnc = this.posEncoding.forward(T);
         const relScores = this.posEncoding.computeRelativeScores(
@@ -127,20 +127,30 @@ export class MultiHeadAttention {
     let scores = this.backend.matmul(qWithBiasU, kT);
 
     const totalT = this.backend.getShape(k)[2] as number;
-    if (this.posWeight) {
+    if (this.posWeight && totalT > 0) {
       const biasV = this.backend.reshape(this.posBiasV, [1, this.numHeads, 1, this.headDim]);
-      const qWithBiasV = this.backend.add(q, biasV);
-      const posEnc = this.posEncoding.forward(totalT);
-      const relScores = this.posEncoding.computeRelativeScores(
-        qWithBiasV, posEnc, this.posWeight, this.numHeads, this.headDim
-      );
-      const relShape = this.backend.getShape(relScores);
-      const relT = relShape[3] as number;
-      if (relT !== totalT) {
-        const sliced = this.backend.slice(relScores, [0, 0, 0, relT - totalT], [B, this.numHeads, T, totalT]);
-        scores = this.backend.add(scores, sliced);
-      } else {
+
+      if (T === totalT) {
+        const qWithBiasV = this.backend.add(q, biasV);
+        const posEnc = this.posEncoding.forward(totalT);
+        const relScores = this.posEncoding.computeRelativeScores(
+          qWithBiasV, posEnc, this.posWeight, this.numHeads, this.headDim
+        );
         scores = this.backend.add(scores, relScores);
+      } else {
+        // Streaming: query has chunk_T frames but keys span totalT frames.
+        // computeRelativeScores + relativeShift assume symmetric T×T, so we
+        // pad the query to totalT, compute full scores, then slice our rows.
+        const qPadded = this.backend.pad(q, [[0, 0], [0, 0], [totalT - T, 0], [0, 0]]);
+        const qPaddedBiased = this.backend.add(qPadded, biasV);
+        const posEnc = this.posEncoding.forward(totalT);
+        const fullRelScores = this.posEncoding.computeRelativeScores(
+          qPaddedBiased, posEnc, this.posWeight, this.numHeads, this.headDim
+        );
+        const relSliced = this.backend.slice(
+          fullRelScores, [0, 0, totalT - T, 0], [B, this.numHeads, T, totalT]
+        );
+        scores = this.backend.add(scores, relSliced);
       }
     }
 

@@ -73,30 +73,29 @@ export class ConvModule {
     const parts = this.backend.split(h, 2, -1);
     h = this.backend.mul(parts[0], this.backend.sigmoid(parts[1]));
 
-    if (convState) {
-      h = this.backend.concat([convState, h], 1);
-    }
-
-    const totalLen = this.backend.getShape(h)[1] as number;
+    const B = this.backend.getShape(h)[0] as number;
     const chunkLen = this.backend.getShape(x)[1] as number;
+    const C = this.backend.getShape(h)[2] as number;
     const stateLen = this.kernelSize - 1;
 
-    const newStateStart = Math.max(0, totalLen - stateLen);
+    // Prepend cached conv state, or zero-initialize on the first chunk
+    // (mirrors NeMo's pre-allocated conv cache of shape [B, kernelSize-1, C])
+    const state = convState ?? this.backend.zeros([B, stateLen, C]);
+    h = this.backend.concat([state, h], 1);
+
+    const totalLen = this.backend.getShape(h)[1] as number;
+
     const newConvState = this.backend.slice(
       h,
-      [0, newStateStart, 0],
-      [this.backend.getShape(h)[0] as number, Math.min(stateLen, totalLen), this.backend.getShape(h)[2] as number]
+      [0, totalLen - stateLen, 0],
+      [B, stateLen, C],
     );
 
     h = this.depthwiseConvNoPad(h);
 
     const convOutLen = this.backend.getShape(h)[1] as number;
     if (convOutLen > chunkLen) {
-      h = this.backend.slice(h, [0, convOutLen - chunkLen, 0], [
-        this.backend.getShape(h)[0] as number,
-        chunkLen,
-        this.backend.getShape(h)[2] as number
-      ]);
+      h = this.backend.slice(h, [0, convOutLen - chunkLen, 0], [B, chunkLen, C]);
     }
 
     h = this.backend.batchNorm(h, this.bnMean, this.bnVar, this.bnWeight, this.bnBias, 1e-5);
