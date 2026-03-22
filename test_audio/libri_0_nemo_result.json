@@ -1,9 +1,0 @@
-{
-  "file": "libri_0.wav",
-  "reference": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL",
-  "nemo_output": "mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
-  "duration_s": 5.855,
-  "nemo_avg_ms": 155.7157834370931,
-  "nemo_std_ms": 1.0523150652346402,
-  "nemo_rtf": 0.026595351569102154
-}
