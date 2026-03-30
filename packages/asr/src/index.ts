@@ -10,11 +10,9 @@ export { FastConformerEncoder, type StreamingEncoderState }
   from './encoder/FastConformerEncoder';
 
 // Decoders
-export { RNNTGreedyDecoder } from './decoder/RNNTGreedyDecoder';
 export { TDTGreedyDecoder } from './decoder/TDTGreedyDecoder';
 export { createDecoder, type GreedyDecoder } from './decoder/createDecoder';
 export { PredictionNetwork, type PredictionState } from './decoder/PredictionNetwork';
-export { RNNTJointNetwork } from './decoder/RNNTJointNetwork';
 export { TDTJointNetwork } from './decoder/TDTJointNetwork';
 
 // Features

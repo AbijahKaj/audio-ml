@@ -1,4 +1,4 @@
-export type DecoderType = 'rnnt' | 'tdt';
+export type DecoderType = 'tdt';
 
 export interface FastConformerConfig {
   encoderLayers: number;
@@ -40,7 +40,7 @@ export function parseModelConfig(json: string): FastConformerConfig {
     windowSizeMs: raw.window_size_ms ?? 25,
     hopSizeMs: raw.hop_size_ms ?? 10,
     attContextSize: raw.att_context_size ?? [70, 1],
-    decoderType: raw.decoder_type ?? 'rnnt',
+    decoderType: raw.decoder_type ?? 'tdt',
     tdtDurations: raw.tdt_num_durations,
     subsamplingConvChannels: raw.subsampling_conv_channels ?? 256,
     normalize: raw.normalize ?? 'per_feature',

@@ -2,7 +2,6 @@ import type { ComputeBackend } from '../compute/Backend';
 import type { FastConformerConfig } from '../model/ModelConfig';
 import { FeaturePipeline } from '../features/FeaturePipeline';
 import { FastConformerEncoder, type StreamingEncoderState } from '../encoder/FastConformerEncoder';
-import type { RNNTGreedyDecoder } from '../decoder/RNNTGreedyDecoder';
 import type { TDTGreedyDecoder } from '../decoder/TDTGreedyDecoder';
 import type { PredictionState } from '../decoder/PredictionNetwork';
 import { SentencePieceDecoder } from '../text/SentencePieceDecoder';
@@ -13,7 +12,7 @@ export interface StreamingResult {
   isFinal: boolean;
   isPartial: boolean;
   latencyMs: number;
-  decoderType: 'rnnt' | 'tdt';
+  decoderType: 'tdt';
 }
 
 export interface ChunkedInferenceConfig {
@@ -46,7 +45,7 @@ export class ChunkedInference {
   private config: FastConformerConfig;
   private featurePipeline: FeaturePipeline;
   private encoder: FastConformerEncoder;
-  private decoder: RNNTGreedyDecoder | TDTGreedyDecoder;
+  private decoder: TDTGreedyDecoder;
   private tokenizer: SentencePieceDecoder;
   private resampler: Resampler | null;
 
@@ -59,7 +58,7 @@ export class ChunkedInference {
     config: FastConformerConfig,
     featurePipeline: FeaturePipeline,
     encoder: FastConformerEncoder,
-    decoder: RNNTGreedyDecoder | TDTGreedyDecoder,
+    decoder: TDTGreedyDecoder,
     tokenizer: SentencePieceDecoder,
     inferenceConfig: ChunkedInferenceConfig,
   ) {
@@ -238,31 +237,16 @@ export class ChunkedInference {
     const T = this.backend.getShape(encoderOutput)[1] as number;
     if (T === 0) return [];
 
-    if (this.isTDT(this.decoder)) {
-      const result = await this.decoder.decodeStreaming(
-        encoderOutput,
-        this.state.decoderState,
-        this.state.lastToken,
-        this.state.tdtFrameOffset,
-      );
-      this.state.decoderState = result.newState;
-      this.state.lastToken = result.newLastToken;
-      this.state.tdtFrameOffset = result.newFrameOffset;
-      return result.tokens;
-    }
-
-    const result = await (this.decoder as RNNTGreedyDecoder).decodeStreaming(
+    const result = await this.decoder.decodeStreaming(
       encoderOutput,
       this.state.decoderState,
       this.state.lastToken,
+      this.state.tdtFrameOffset,
     );
     this.state.decoderState = result.newState;
     this.state.lastToken = result.newLastToken;
+    this.state.tdtFrameOffset = result.newFrameOffset;
     return result.tokens;
-  }
-
-  private isTDT(_decoder: RNNTGreedyDecoder | TDTGreedyDecoder): _decoder is TDTGreedyDecoder {
-    return this.config.decoderType === 'tdt';
   }
 
   private disposeState(): void {

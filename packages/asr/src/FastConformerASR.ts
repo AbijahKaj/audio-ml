@@ -29,7 +29,7 @@ export interface ASRResult {
   text: string;
   isFinal: boolean;
   latencyMs: number;
-  decoderType: 'rnnt' | 'tdt';
+  decoderType: 'tdt';
   tokenCount: number;
 }
 
@@ -185,7 +185,7 @@ export class FastConformerASR extends BaseApplication {
         text: '',
         isFinal: true,
         latencyMs: 0,
-        decoderType: this.config?.decoderType ?? 'rnnt',
+        decoderType: this.config?.decoderType ?? 'tdt',
         tokenCount: 0,
       };
     }
@@ -241,7 +241,7 @@ export class FastConformerASR extends BaseApplication {
         text: '',
         isFinal: true,
         latencyMs: 0,
-        decoderType: this.config?.decoderType ?? 'rnnt',
+        decoderType: this.config?.decoderType ?? 'tdt',
         tokenCount: 0,
       };
     }

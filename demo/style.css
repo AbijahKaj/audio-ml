@@ -714,3 +714,31 @@ button:focus-visible {
   margin-top: 0.75rem;
   text-align: right;
 }
+
+/* Mode Toggle Styles */
+.asr-mode-section {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  justify-content: center;
+}
+
+.asr-mode-label {
+  color: #bbb;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  background-color: #2a2a2a;
+  border-radius: 6px;
+  border: 1px solid #444;
+  transition: all 0.2s;
+}
+
+.asr-mode-label:hover {
+  border-color: #646cff;
+}
+
+.asr-mode-label input[type="radio"] {
+  margin-right: 0.5rem;
+  accent-color: #646cff;
+}

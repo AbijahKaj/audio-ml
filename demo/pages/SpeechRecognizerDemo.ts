@@ -1,8 +1,14 @@
 /**
  * Speech Recognizer (ASR) Demo Page
  *
- * Loads a FastConformer model, streams mic / file audio through the
- * FastConformerASR and displays live transcription results.
+ * Loads a FastConformer TDT model, streams mic / file audio through the
+ * FastConformerASR and displays transcription results.
+ *
+ * Two modes:
+ *   - Live Mode: VAD-based utterance segmentation with offline transcription
+ *     of each complete utterance when a pause is detected.
+ *   - Offline Mode: Records all audio, then transcribes the entire recording
+ *     at once when stopped.
  */
 
 import { FastConformerASR, type ASRResult, Endpointer } from '@audio-ml/asr';
@@ -23,14 +29,6 @@ interface ModelSpec {
 /**
  * HuggingFace-hosted models.
  * Converted from NeMo checkpoints via tools/export_nemo_to_safetensors.py
- *
- * To use your own model, run the export script and push to HF:
- *   python tools/export_nemo_to_safetensors.py \
- *       --model nvidia/parakeet-tdt_ctc-110m \
- *       --output-dir exported/parakeet-tdt-110m
- *   huggingface-cli upload YOUR_USER/parakeet-tdt-110m-web exported/parakeet-tdt-110m .
- *
- * Then add the HF resolve URLs below.
  */
 function hfModel(repo: string): { config: string; weights: string; vocab: string } {
   const base = `https://huggingface.co/${repo}/resolve/main`;
@@ -42,7 +40,6 @@ function hfModel(repo: string): { config: string; weights: string; vocab: string
 }
 
 const HF_PARAKEET_TDT_110M = hfModel('AbijahKaj/parakeet-tdt-110m-web');
-const HF_PARAKEET_RNNT_120M = hfModel('AbijahKaj/parakeet-rnnt-120m-web');
 const HF_FASTCONFORMER_TDT_LARGE = hfModel('AbijahKaj/fastconformer-tdt-large-web');
 
 const MODELS: Record<string, ModelSpec> = {
@@ -52,14 +49,6 @@ const MODELS: Record<string, ModelSpec> = {
     weightsUrl: HF_PARAKEET_TDT_110M.weights,
     vocabUrl: HF_PARAKEET_TDT_110M.vocab,
     description: 'English, 110M params, TDT decoder — fast, browser-optimized',
-    sizeMB: 220,
-  },
-  parakeetRnnt120m: {
-    label: 'Parakeet RNNT 120M (Streaming)',
-    configUrl: HF_PARAKEET_RNNT_120M.config,
-    weightsUrl: HF_PARAKEET_RNNT_120M.weights,
-    vocabUrl: HF_PARAKEET_RNNT_120M.vocab,
-    description: 'English, 120M params, RNNT decoder — streaming-optimized with end-of-utterance',
     sizeMB: 220,
   },
   fastconformerTdtLarge: {
@@ -145,19 +134,22 @@ async function fetchTextCached(url: string): Promise<string> {
 /*  Demo page                                                          */
 /* ------------------------------------------------------------------ */
 
+export type TranscriptionMode = 'live' | 'offline';
+
 export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
   let recognizer: FastConformerASR | null = null;
   let audioInput: AudioInput | null = null;
   let destroyed = false;
+  let transcriptionMode: TranscriptionMode = 'live';
 
   // ---- layout ----
   const wrapper = el('div', 'asr-wrapper');
 
   const header = el('div', 'asr-header');
   header.innerHTML = `<h2 class="asr-title">Speech Recognition</h2>
-    <p class="asr-subtitle">FastConformer RNNT / TDT &mdash; runs entirely in the browser via TensorFlow.js</p>
+    <p class="asr-subtitle">FastConformer TDT — runs entirely in the browser via TensorFlow.js</p>
     <p class="asr-subtitle" style="font-size:0.85rem;opacity:0.7;margin-top:0.25rem">
-      Record or upload audio &rarr; streaming preview during recording &rarr; accurate offline transcription on stop
+      Record or upload audio &rarr; choose Live (VAD-segmented) or Offline (full-recording) transcription
     </p>`;
   wrapper.appendChild(header);
 
@@ -176,7 +168,6 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
 
   const backendSelect = document.createElement('select');
   backendSelect.className = 'asr-select';
-  // GPU only: pure JS / WASM CPU backends make this model unusable in the browser (long freezes).
   for (const [value, label] of [['webgpu', 'WebGPU'], ['webgl', 'WebGL']] as const) {
     const opt = document.createElement('option');
     opt.value = value;
@@ -236,8 +227,9 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
   explainer.innerHTML = `
     <h2 class="app-explainer-title">How It Works</h2>
     <p class="app-explainer-description">
-      This demo runs NVIDIA's FastConformer ASR model <strong>entirely in the browser</strong>
-      using <code>TensorFlow.js</code>. No audio leaves your device.
+      This demo runs a FastConformer TDT (Token-and-Duration Transducer) ASR model
+      <strong>entirely in the browser</strong> using <code>TensorFlow.js</code>.
+      No audio leaves your device.
     </p>
     <div class="app-explainer-phases">
       <div class="app-explainer-phase">
@@ -246,13 +238,13 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
       </div>
       <div class="app-explainer-phase">
         <h4>2. FastConformer Encoder</h4>
-        <p>17 Conformer blocks with multi-head self-attention, depthwise convolutions,
+        <p>Conformer blocks with multi-head self-attention, depthwise convolutions,
            and feed-forward layers downsample the features 8&times; in time.</p>
       </div>
       <div class="app-explainer-phase">
-        <h4>3. Transducer Decoder</h4>
-        <p>An RNNT (or TDT) decoder with an LSTM prediction network emits subword
-           tokens frame-by-frame. TDT skips frames for 2&ndash;5&times; faster decoding.</p>
+        <h4>3. TDT Decoder</h4>
+        <p>The Token-and-Duration Transducer emits subword tokens with frame-skip
+           predictions, enabling 2&ndash;5&times; faster decoding than traditional RNN-T.</p>
       </div>
       <div class="app-explainer-phase">
         <h4>4. SentencePiece Detokenizer</h4>
@@ -328,18 +320,46 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     backendSelect.style.display = 'none';
     backendHint.style.display = 'none';
 
+    // Mode toggle
+    const modeSection = el('div', 'asr-mode-section');
+    modeSection.style.cssText = 'display:flex;gap:1rem;margin-bottom:1.5rem;justify-content:center';
+
+    const liveLabel = el('label', 'asr-mode-label');
+    liveLabel.innerHTML = '<input type="radio" name="asr-mode" value="live" checked> Live (VAD-segmented)';
+    modeSection.appendChild(liveLabel);
+
+    const offlineLabel = el('label', 'asr-mode-label');
+    offlineLabel.innerHTML = '<input type="radio" name="asr-mode" value="offline"> Offline (full recording)';
+    modeSection.appendChild(offlineLabel);
+
+    audioSection.insertBefore(modeSection, audioSection.firstChild);
+
+    modeSection.querySelectorAll('input[type="radio"]').forEach(radio => {
+      (radio as HTMLInputElement).addEventListener('change', (e) => {
+        transcriptionMode = (e.target as HTMLInputElement).value as TranscriptionMode;
+        if (audioInput) {
+          audioInput.stop();
+          partialLine.textContent = `Switched to ${transcriptionMode === 'live' ? 'Live' : 'Offline'} mode — press Record to start again`;
+          latencyLabel.textContent = '';
+          recognizer?.reset();
+        }
+      });
+    });
+
     audioInput = new AudioInput(INPUT_SAMPLE_RATE);
     new AudioInputUI(audioSection, audioInput);
 
-    // VAD endpointer detects pauses and triggers offline transcription
-    // of each utterance segment for accurate results while recording.
+    // VAD endpointer for live mode
     const endpointer = new Endpointer({
       sampleRate: INPUT_SAMPLE_RATE,
       silenceTimeoutMs: 1200,
     });
 
+    // Buffer for offline mode
+    const offlineBuffer: Float32Array[] = [];
+
+    // Live mode utterance tracking
     let utteranceChunks: Float32Array[] = [];
-    let allChunks: Float32Array[] = [];
     let transcribing = false;
 
     async function transcribeUtterance() {
@@ -368,10 +388,18 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     audioInput.on('pcm-data', async (pcm: Float32Array) => {
       if (!recognizer) return;
       const copy = new Float32Array(pcm);
-      utteranceChunks.push(copy);
-      allChunks.push(copy);
 
-      // VAD-based utterance segmentation
+      // Always buffer for offline mode
+      if (transcriptionMode === 'offline') {
+        offlineBuffer.push(copy);
+        const dur = offlineBuffer.reduce((s, c) => s + c.length, 0) / INPUT_SAMPLE_RATE;
+        partialLine.textContent = `Recording (${dur.toFixed(1)}s) — stop to transcribe`;
+        return;
+      }
+
+      // Live mode: VAD-based segmentation
+      utteranceChunks.push(copy);
+
       const event = endpointer.processFrame(pcm);
       if (event === 'speech') {
         const dur = utteranceChunks.reduce((s, c) => s + c.length, 0) / INPUT_SAMPLE_RATE;
@@ -379,33 +407,53 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
       } else if (event === 'speech-end') {
         transcribeUtterance();
       }
-
-      // Also feed streaming for live preview text
-      const result = await recognizer.processFrameAsync(pcm);
-      if (result && result.text.trim()) {
-        latencyLabel.textContent = `Preview: ${result.text}`;
-      }
     });
 
     audioInput.on('start', () => {
-      utteranceChunks = [];
-      allChunks = [];
-      endpointer.reset();
-      partialLine.textContent = '(listening\u2026)';
+      if (transcriptionMode === 'live') {
+        utteranceChunks = [];
+        endpointer.reset();
+        partialLine.textContent = '(listening\u2026)';
+      } else {
+        offlineBuffer.length = 0;
+        partialLine.textContent = '(recording\u2026)';
+      }
       latencyLabel.textContent = '';
-      recognizer?.start();
+      recognizer?.reset();
     });
 
     audioInput.on('stop', async () => {
       if (!recognizer) return;
 
-      // Transcribe any remaining audio in the current utterance
-      if (utteranceChunks.length > 0) {
-        await transcribeUtterance();
+      if (transcriptionMode === 'live') {
+        // Transcribe any remaining audio in the current utterance
+        if (utteranceChunks.length > 0) {
+          await transcribeUtterance();
+        }
+        partialLine.textContent = '';
+        latencyLabel.textContent = '';
+      } else {
+        // Offline mode: transcribe entire recording
+        if (offlineBuffer.length > 0) {
+          const totalLen = offlineBuffer.reduce((s, c) => s + c.length, 0);
+          const audio = new Float32Array(totalLen);
+          let off = 0;
+          for (const c of offlineBuffer) { audio.set(c, off); off += c.length; }
+
+          const audioDurationS = totalLen / INPUT_SAMPLE_RATE;
+          partialLine.textContent = `Transcribing full recording (${audioDurationS.toFixed(1)}s)\u2026`;
+          const result = await recognizer.transcribe(audio);
+          if (result.text.trim()) {
+            appendTranscript(result, audioDurationS);
+          }
+          partialLine.textContent = '';
+          offlineBuffer.length = 0;
+        } else {
+          partialLine.textContent = 'No audio recorded';
+        }
+        latencyLabel.textContent = '';
       }
 
-      partialLine.textContent = '';
-      latencyLabel.textContent = '';
       recognizer.reset();
     });
   }
@@ -414,7 +462,7 @@ export function createSpeechRecognizerDemo(container: HTMLElement): () => void {
     const entry = el('div', 'asr-transcript-entry');
     const time = new Date().toLocaleTimeString();
     const inferMs = Math.round(result.latencyMs);
-    let meta = `${inferMs} ms · ${result.decoderType.toUpperCase()} · ${result.tokenCount} tokens`;
+    let meta = `${inferMs} ms · ${result.tokenCount} tokens`;
     if (audioDurationS && audioDurationS > 0) {
       const rtf = (result.latencyMs / 1000 / audioDurationS).toFixed(2);
       meta += ` · ${audioDurationS.toFixed(1)}s audio · RTF ${rtf}x`;

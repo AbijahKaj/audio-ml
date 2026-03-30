@@ -2,6 +2,8 @@
 
 FastConformer speech recognition in **TypeScript**, powered by **TensorFlow.js**. Models are exported from [NVIDIA NeMo](https://github.com/NVIDIA/NeMo) to SafeTensors plus JSON config and vocabulary—see the [`audio-ml` repo](https://github.com/AbijahKaj/audio-ml) and `tools/export_nemo_to_safetensors.py`.
 
+Uses a **TDT (Token-and-Duration Transducer)** decoder for both streaming and offline transcription. TDT predicts both a token and a duration (frame skip), enabling 2–5× faster decoding than traditional RNN-T.
+
 This package depends on **[`audio-ml`](https://www.npmjs.com/package/audio-ml)** for shared application types (for example `BaseApplication` and VAD used by streaming endpointing).
 
 ## Install
@@ -25,7 +27,6 @@ These Hugging Face repos ship `model.safetensors`, `model_config.json`, and `voc
 | Model | Hugging Face repo | Notes |
 |-------|-------------------|--------|
 | Parakeet TDT 110M | [AbijahKaj/parakeet-tdt-110m-web](https://huggingface.co/AbijahKaj/parakeet-tdt-110m-web) | English, TDT decoder, ~220 MB weights |
-| Parakeet RNNT 120M (streaming) | [AbijahKaj/parakeet-rnnt-120m-web](https://huggingface.co/AbijahKaj/parakeet-rnnt-120m-web) | English, RNNT, streaming-oriented |
 | FastConformer TDT Large | [AbijahKaj/fastconformer-tdt-large-web](https://huggingface.co/AbijahKaj/fastconformer-tdt-large-web) | English, TDT, ~218 MB weights |
 
 Resolve URLs follow this pattern (`{repo}` = `username/repo`):
@@ -66,10 +67,31 @@ To load from already-fetched buffers:
 await asr.loadFromBuffers(modelArrayBuffer, configJsonString, vocabJsonString);
 ```
 
-Offline pass:
+Offline pass (full audio transcription):
 
 ```typescript
 const result = await asr.transcribe(audioFloat32);
+```
+
+Streaming inference with VAD endpointing:
+
+```typescript
+// Construct with streaming + VAD enabled
+const asr = new FastConformerASR({
+  sampleRate: 16_000,
+  modelPath: `${HF}/model.safetensors`,
+  configPath: `${HF}/model_config.json`,
+  vocabPath: `${HF}/vocab.json`,
+  backend: 'webgpu',
+  streaming: true,
+  chunkSizeMs: 2000,
+  silenceTimeoutMs: 1200,
+});
+
+// processFrame feeds audio and fires 'partial' / 'final' events
+asr.on('partial', (p) => setLivePreview(p.text));
+asr.on('final', (r: ASRResult) => appendTranscript(r.text));
+asr.processFrame(pcmFrame);
 ```
 
 ## TensorFlow.js backends
