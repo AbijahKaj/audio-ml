@@ -18,6 +18,12 @@ Usage:
       --model nvidia/parakeet_realtime_eou_120m-v1 \
       --output-dir exported/parakeet-rnnt-120m
 
+  # Export the multilingual 0.6B TDT v3 model (25 European languages, PnC)
+  # ~1.2 GB float16 weights — large download, use WebGPU in the browser.
+  python tools/export_nemo_to_safetensors.py \
+      --model nvidia/parakeet-tdt-0.6b-v3 \
+      --output-dir exported/parakeet-tdt-0.6b-v3
+
   # Then upload to HuggingFace:
   huggingface-cli upload YOUR_USER/parakeet-tdt-110m-safetensors exported/parakeet-tdt-110m .
 """
