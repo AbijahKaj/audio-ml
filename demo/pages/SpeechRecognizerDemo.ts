@@ -41,6 +41,7 @@ function hfModel(repo: string): { config: string; weights: string; vocab: string
 
 const HF_PARAKEET_TDT_110M = hfModel('AbijahKaj/parakeet-tdt-110m-web');
 const HF_FASTCONFORMER_TDT_LARGE = hfModel('AbijahKaj/fastconformer-tdt-large-web');
+const HF_PARAKEET_TDT_06B_V3 = hfModel('AbijahKaj/parakeet-tdt-0.6b-v3-web');
 
 const MODELS: Record<string, ModelSpec> = {
   parakeetTdt110m: {
@@ -58,6 +59,15 @@ const MODELS: Record<string, ModelSpec> = {
     vocabUrl: HF_FASTCONFORMER_TDT_LARGE.vocab,
     description: 'English, 115M params, TDT decoder — high accuracy offline model',
     sizeMB: 218,
+  },
+  parakeetTdt06bV3: {
+    label: 'Parakeet TDT 0.6B v3 (multilingual)',
+    configUrl: HF_PARAKEET_TDT_06B_V3.config,
+    weightsUrl: HF_PARAKEET_TDT_06B_V3.weights,
+    vocabUrl: HF_PARAKEET_TDT_06B_V3.vocab,
+    description:
+      '25 European languages, 600M params, TDT decoder — punctuation & capitalization, auto language detection. Large download; WebGPU strongly recommended.',
+    sizeMB: 1200,
   },
 };
 

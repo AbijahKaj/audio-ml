@@ -28,6 +28,31 @@ These Hugging Face repos ship `model.safetensors`, `model_config.json`, and `voc
 |-------|-------------------|--------|
 | Parakeet TDT 110M | [AbijahKaj/parakeet-tdt-110m-web](https://huggingface.co/AbijahKaj/parakeet-tdt-110m-web) | English, TDT decoder, ~220 MB weights |
 | FastConformer TDT Large | [AbijahKaj/fastconformer-tdt-large-web](https://huggingface.co/AbijahKaj/fastconformer-tdt-large-web) | English, TDT, ~218 MB weights |
+| Parakeet TDT 0.6B v3 | [AbijahKaj/parakeet-tdt-0.6b-v3-web](https://huggingface.co/AbijahKaj/parakeet-tdt-0.6b-v3-web) | **Multilingual** (25 European languages), TDT decoder, punctuation & capitalization, auto language detection, ~1.2 GB float16 weights — use the `webgpu` backend |
+
+### Multilingual (Parakeet TDT 0.6B v3)
+
+[`nvidia/parakeet-tdt-0.6b-v3`](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) is a
+600M-parameter FastConformer-TDT model covering **25 European languages** (English, French,
+German, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Ukrainian, and 15 more) with
+automatic language detection, punctuation, and capitalization. It shares the exact same
+FastConformer encoder + TDT decoder architecture as the English models, so this package runs
+it unchanged — it only needs the v3 weights and its larger SentencePiece vocabulary.
+
+The vocabulary uses **byte-fallback** tokens (`<0xNN>`) for characters outside the subword
+vocabulary; `SentencePieceDecoder` decodes consecutive byte tokens back into the correct
+UTF-8 characters, so accented and non-Latin scripts transcribe correctly.
+
+Export it yourself from the NeMo checkpoint:
+
+```bash
+python tools/export_nemo_to_safetensors.py \
+  --model nvidia/parakeet-tdt-0.6b-v3 \
+  --output-dir exported/parakeet-tdt-0.6b-v3
+```
+
+> The float16 weights are ~1.2 GB. Prefer the `webgpu` backend; CPU/WASM are impractical at
+> this size.
 
 Resolve URLs follow this pattern (`{repo}` = `username/repo`):
 

@@ -146,7 +146,7 @@ The package also exports lower-level pieces (`FastConformerEncoder`, decoders, `
 
 ## Use Cases
 
-- **Speech recognition (end-to-end)**: `@audio-ml/asr` with **`FastConformerASR`** for in-browser or Node ASR with exported NeMo-compatible weights
+- **Speech recognition (end-to-end)**: `@audio-ml/asr` with **`FastConformerASR`** for in-browser or Node ASR with exported NeMo-compatible weights (English models plus the multilingual **Parakeet TDT 0.6B v3** covering 25 European languages)
 - **Speech recognition (features only)**: MFCC and PLP for acoustic modeling, spectral features for phone classification
 - **Speaker identification**: Voiceprint extraction via MFCC, LPC, and Spectral Centroid/Bandwidth
 - **Voice activity detection**: VAD application, or build your own with RMSE, ZCR, and Spectral Flatness
